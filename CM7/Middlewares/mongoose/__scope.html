@@ -1,0 +1,505 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>STM32 Scope</title>
+<style>
+  :root {
+    --bg:        #080b0c;
+    --panel:     #0e1518;
+    --panel-2:   #0b1113;
+    --line:      #1b2a2d;
+    --phosphor:  #45e6b0;
+    --amber:     #f5a623;
+    --text:      #cbd6d6;
+    --dim:       #61757a;
+    --grat:      rgba(120,200,180,0.085);
+    --grat-axis: rgba(120,200,180,0.20);
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    display: grid;
+    grid-template-columns: 1fr 248px;
+    grid-template-rows: auto 1fr auto;
+    grid-template-areas:
+      "status  measure"
+      "scope   measure"
+      "scale   acquire";
+    gap: 1px;
+    background: var(--line);   /* gaps show as hairlines */
+    padding: 1px;
+    min-height: 100%;
+  }
+  .pane { background: var(--bg); }
+
+  /* ---- status bar ---- */
+  .status {
+    grid-area: status;
+    background: var(--panel-2);
+    display: flex; align-items: center; gap: 22px;
+    padding: 10px 16px;
+    font-family: var(--mono);
+    font-size: 12px;
+  }
+  .stat { display: flex; gap: 8px; align-items: baseline; }
+  .stat .k { color: var(--dim); text-transform: uppercase; letter-spacing: .08em; font-family: var(--sans); font-size: 10px; }
+  .stat .v { color: var(--text); font-variant-numeric: tabular-nums; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--dim); }
+  .dot.live { background: var(--phosphor); box-shadow: 0 0 8px var(--phosphor); }
+  .badge {
+    margin-left: auto; font-family: var(--sans); font-size: 10px; letter-spacing: .14em;
+    color: var(--amber); border: 1px solid color-mix(in srgb, var(--amber) 40%, transparent);
+    padding: 3px 8px; border-radius: 3px; text-transform: uppercase;
+  }
+
+  /* ---- scope ---- */
+  .scope { grid-area: scope; position: relative; background: var(--bg); overflow: hidden; }
+  .scope canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+  /* ---- bottom scale strip ---- */
+  .scale {
+    grid-area: scale;
+    background: var(--panel-2);
+    display: flex; gap: 28px; align-items: center;
+    padding: 9px 16px;
+    font-family: var(--mono); font-size: 12px;
+  }
+  .scale .k { color: var(--dim); font-family: var(--sans); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; margin-right: 7px; }
+  .scale .v { font-variant-numeric: tabular-nums; }
+
+  /* ---- right panels ---- */
+  .measure { grid-area: measure; background: var(--panel); padding: 14px; overflow:auto; }
+  .acquire { grid-area: acquire; background: var(--panel); padding: 14px; }
+  .h {
+    font-size: 10px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--dim); margin: 0 0 12px;
+  }
+  .acquire .h { margin-top: 4px; }
+
+  /* measurement grid */
+  .meas-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 14px; }
+  .m { display: flex; flex-direction: column; gap: 3px; }
+  .m .lbl { font-size: 10px; color: var(--dim); letter-spacing: .05em; text-transform: uppercase; }
+  .m .num { font-family: var(--mono); font-size: 19px; color: var(--phosphor); font-variant-numeric: tabular-nums; line-height: 1; }
+  .m .num small { font-size: 11px; color: var(--dim); margin-left: 2px; }
+  .m.amber .num { color: var(--amber); }
+
+  /* controls */
+  .ctl { margin-bottom: 16px; }
+  .ctl > .lbl { display:block; font-size: 10px; color: var(--dim); letter-spacing:.05em; text-transform: uppercase; margin-bottom: 7px; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 4px; overflow: hidden; }
+  .seg button {
+    flex: 1; background: transparent; color: var(--dim); border: 0;
+    padding: 7px 0; font-family: var(--mono); font-size: 12px; cursor: pointer;
+    border-right: 1px solid var(--line);
+  }
+  .seg button:last-child { border-right: 0; }
+  .seg button:hover { color: var(--text); background: rgba(255,255,255,.03); }
+  .seg button[aria-pressed="true"] { background: color-mix(in srgb, var(--phosphor) 16%, transparent); color: var(--phosphor); }
+  .seg button:focus-visible { outline: 2px solid var(--phosphor); outline-offset: -2px; }
+
+  .run {
+    width: 100%; padding: 12px; border: 0; border-radius: 4px; cursor: pointer;
+    font-family: var(--mono); font-size: 14px; letter-spacing: .04em;
+    background: var(--amber); color: #1a1205; font-weight: 600;
+    margin-bottom: 16px;
+  }
+  .run.running { background: transparent; color: var(--phosphor); border: 1px solid color-mix(in srgb, var(--phosphor) 45%, transparent); }
+  .run:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+
+  .slider { display: flex; align-items: center; gap: 10px; }
+  .slider input { flex: 1; accent-color: var(--phosphor); }
+  .slider .out { font-family: var(--mono); font-size: 12px; color: var(--text); min-width: 56px; text-align: right; font-variant-numeric: tabular-nums; }
+
+  @media (max-width: 720px) {
+    body { grid-template-columns: 1fr; grid-template-areas: "status" "scope" "scale" "measure" "acquire"; }
+    .scope { min-height: 46vh; }
+  }
+</style>
+
+<body>
+  <div class="status pane">
+    <span class="dot" id="dot"></span>
+    <div class="stat"><span class="k">Link</span><span class="v" id="link">simulated</span></div>
+    <div class="stat"><span class="k">Frame</span><span class="v" id="seq">—</span></div>
+    <div class="stat"><span class="k">Dropped</span><span class="v" id="drops">0</span></div>
+    <div class="stat"><span class="k">FPS</span><span class="v" id="fps">0</span></div>
+    <span class="badge" id="srcbadge">Sim</span>
+  </div>
+
+  <div class="scope pane">
+    <canvas id="grat"></canvas>
+    <canvas id="trace"></canvas>
+  </div>
+
+  <div class="scale pane">
+    <div><span class="k">Time / div</span><span class="v" id="tdiv">—</span></div>
+    <div><span class="k">Sample rate</span><span class="v" id="srread">—</span></div>
+    <div><span class="k">Trigger</span><span class="v" id="trgread">—</span></div>
+  </div>
+
+  <div class="measure pane">
+    <p class="h">Measure</p>
+    <div class="meas-grid">
+      <div class="m"><span class="lbl">Vpp</span>      <span class="num" id="vpp">—</span></div>
+      <div class="m"><span class="lbl">RMS</span>      <span class="num" id="rms">—</span></div>
+      <div class="m"><span class="lbl">Frequency</span><span class="num" id="freq">—</span></div>
+      <div class="m"><span class="lbl">DC level</span> <span class="num" id="dc">—</span></div>
+      <div class="m"><span class="lbl">Min</span>      <span class="num" id="vmin">—</span></div>
+      <div class="m"><span class="lbl">Max</span>      <span class="num" id="vmax">—</span></div>
+    </div>
+  </div>
+
+  <div class="acquire pane">
+    <p class="h">Acquire</p>
+    <button class="run" id="run">Run</button>
+
+    <div class="ctl">
+      <span class="lbl">Points</span>
+      <div class="seg" id="points" role="group" aria-label="Points per frame">
+        <button data-v="256">256</button>
+        <button data-v="512" aria-pressed="true">512</button>
+        <button data-v="1024">1024</button>
+      </div>
+    </div>
+
+    <div class="ctl">
+      <span class="lbl">Sample rate</span>
+      <div class="seg" id="rate" role="group" aria-label="Sample rate">
+        <button data-v="50000">50k</button>
+        <button data-v="100000" aria-pressed="true">100k</button>
+        <button data-v="500000">500k</button>
+      </div>
+    </div>
+
+    <div class="ctl">
+      <span class="lbl">Trigger</span>
+      <div class="seg" id="trig" role="group" aria-label="Trigger mode">
+        <button data-v="rising" aria-pressed="true">Rising</button>
+        <button data-v="free">Free</button>
+      </div>
+    </div>
+
+    <div class="ctl">
+      <span class="lbl">DAC frequency</span>
+      <div class="slider">
+        <input type="range" id="dac" min="100" max="20000" step="100" value="1000" aria-label="DAC frequency">
+        <span class="out" id="dacout">1.00 kHz</span>
+      </div>
+    </div>
+  </div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   Константы тракта (под твой H755: 12-бит АЦП, опорное 3.3 В)
+   ============================================================ */
+const VREF = 3.3, ADC_MAX = 4095;
+const code2v = c => (c / ADC_MAX) * VREF;
+
+/* ============================================================
+   Парсер бинарного кадра — раскладка ОДИН-В-ОДИН с ipc_frame_t.
+   Сервер -> клиент фреймы НЕ маскируются, так что это весь разбор.
+   ============================================================ */
+function parseFrame(buf) {
+  const dv = new DataView(buf);
+  const f = {
+    seq:        dv.getUint32(0,  true),
+    n:          dv.getUint16(4,  true),
+    flags:      dv.getUint16(6,  true),
+    rate:       dv.getUint32(8,  true),
+    trigOffset: dv.getInt32(12,  true),
+    dc:         dv.getUint16(16, true),
+    vmin:       dv.getUint16(18, true),
+    vmax:       dv.getUint16(20, true),
+    vpp:        dv.getUint16(22, true),
+    rms:        dv.getFloat32(24,true),
+    crossings:  dv.getUint32(28, true),
+  };
+  f.trigValid = !!(f.flags & 0x1);
+  f.samples = new Uint16Array(buf, 32, f.n);   // вид поверх того же буфера
+  return f;
+}
+
+/* ============================================================
+   Симулятор: строит кадр в ТОЧНОМ проводном формате (ArrayBuffer),
+   затем гонит его через parseFrame — тот же путь, что и реальный WS.
+   Заменяется на WebSocket без изменения остального кода.
+   ============================================================ */
+const sim = { freq: 1000, n: 512, rate: 100000, trig: "rising", phase: 0, seq: 0, run: false };
+
+function buildSimFrame() {
+  const { n, rate, freq } = sim;
+  const buf = new ArrayBuffer(32 + 2 * n);
+  const dv = new DataView(buf);
+  const s = new Uint16Array(buf, 32, n);
+
+  const dcCode = 2048, amp = 1500;            // ~1.65 В ± 1.21 В
+  const dphi = 2 * Math.PI * freq / rate;
+  let mn = 4095, mx = 0, sum = 0, sumsq = 0, cross = 0, prev = dcCode, trig = -1;
+
+  for (let i = 0; i < n; i++) {
+    sim.phase += dphi;
+    let v = Math.sin(sim.phase)
+          + 0.06 * Math.sin(3 * sim.phase)    // лёгкая 3-я гармоника
+          + (Math.random() - 0.5) * 0.04;     // шум
+    let c = Math.max(0, Math.min(4095, Math.round(dcCode + amp * v)));
+    s[i] = c;
+    if (c < mn) mn = c; if (c > mx) mx = c;
+    sum += c; sumsq += (c - dcCode) * (c - dcCode);
+    if (prev < dcCode && c >= dcCode) { cross++; if (trig < 0) trig = i; }  // восх. фронт
+    prev = c;
+  }
+  const dc = Math.round(sum / n);
+  const rms = Math.sqrt(sumsq / n);
+  const risingMode = sim.trig === "rising" && trig >= 0;
+
+  dv.setUint32(0,  ++sim.seq, true);
+  dv.setUint16(4,  n, true);
+  dv.setUint16(6,  risingMode ? 0x3 : 0x2, true);   // bit0 trig_valid, bit1 signal
+  dv.setUint32(8,  rate, true);
+  dv.setInt32(12,  risingMode ? trig : 0, true);
+  dv.setUint16(16, dc, true);
+  dv.setUint16(18, mn, true);
+  dv.setUint16(20, mx, true);
+  dv.setUint16(22, mx - mn, true);
+  dv.setFloat32(24, rms, true);
+  dv.setUint32(28, cross, true);
+  return buf;
+}
+
+/* ============================================================
+   Конвейер: «свежий кадр» (как кольцо — храним только последний)
+   ============================================================ */
+let latest = null;                 // последний разобранный кадр
+let prevSeq = null, dropCount = 0;
+
+function onFrame(buf) {
+  const f = parseFrame(buf);
+  if (prevSeq !== null) {
+    const gap = (f.seq - prevSeq - 1) & 0xffffffff;
+    if (gap > 0 && gap < 1e6) dropCount += gap;   // пропуск в нумерации = дроп
+  }
+  prevSeq = f.seq;
+  latest = f;
+}
+
+/* ============================================================
+   Реальный WebSocket — раскомментируй и укажи адрес CM7.
+   text-фреймы = управление/ack, binary = кадры АЦП.
+   ============================================================ */
+let ws = null;
+function connectScope(url) {
+  ws = new WebSocket(url);
+  ws.binaryType = "arraybuffer";
+  ws.onopen    = () => setLink(true);
+  ws.onclose   = () => setLink(false);
+  ws.onmessage = (e) => {
+    if (typeof e.data === "string") handleControl(JSON.parse(e.data));  // ack/телеметрия
+    else onFrame(e.data);                                              // кадр
+  };
+}
+function handleControl(msg) { /* {ack:"set_rate", ok:true, ...} */ }
+
+/* Отправка команды. В sim-режиме крутим симулятор;
+   с реальным WS — ws.send(JSON.stringify(cmd)). */
+function sendCommand(cmd) {
+  if (ws && ws.readyState === 1) { ws.send(JSON.stringify(cmd)); return; }
+  switch (cmd.cmd) {                       // sim-ветка
+    case "stream_on":  sim.run = true;  break;
+    case "stream_off": sim.run = false; break;
+    case "set_points": sim.n = cmd.n;   break;
+    case "set_rate":   sim.rate = cmd.hz; break;
+    case "set_trig":   sim.trig = cmd.mode; break;
+    case "set_dac":    sim.freq = cmd.hz; break;
+  }
+}
+
+/* ============================================================
+   Рендер: графитка + фосфорная трасса с послесвечением
+   ============================================================ */
+const DIVX = 10, DIVY = 8;
+const gratCv = document.getElementById("grat");
+const traceCv = document.getElementById("trace");
+const gctx = gratCv.getContext("2d");
+const tctx = traceCv.getContext("2d");
+let W = 0, H = 0, dpr = 1;
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function resize() {
+  const r = traceCv.parentElement.getBoundingClientRect();
+  dpr = Math.min(2, window.devicePixelRatio || 1);
+  W = r.width; H = r.height;
+  for (const cv of [gratCv, traceCv]) { cv.width = W * dpr; cv.height = H * dpr; }
+  gctx.setTransform(dpr,0,0,dpr,0,0);
+  tctx.setTransform(dpr,0,0,dpr,0,0);
+  drawGraticule();
+}
+
+function drawGraticule() {
+  gctx.clearRect(0,0,W,H);
+  gctx.lineWidth = 1;
+  gctx.strokeStyle = getCss("--grat");
+  gctx.beginPath();
+  for (let i = 1; i < DIVX; i++) { const x = (W/DIVX)*i; gctx.moveTo(x,0); gctx.lineTo(x,H); }
+  for (let i = 1; i < DIVY; i++) { const y = (H/DIVY)*i; gctx.moveTo(0,y); gctx.lineTo(W,y); }
+  gctx.stroke();
+  // центральные оси ярче
+  gctx.strokeStyle = getCss("--grat-axis");
+  gctx.beginPath();
+  gctx.moveTo(W/2,0); gctx.lineTo(W/2,H);
+  gctx.moveTo(0,H/2); gctx.lineTo(W,H/2);
+  gctx.stroke();
+  // мелкие тики по центральным осям
+  gctx.beginPath();
+  for (let i = 0; i <= DIVX*5; i++){ const x=(W/(DIVX*5))*i; gctx.moveTo(x,H/2-3); gctx.lineTo(x,H/2+3); }
+  for (let i = 0; i <= DIVY*5; i++){ const y=(H/(DIVY*5))*i; gctx.moveTo(W/2-3,y); gctx.lineTo(W/2+3,y); }
+  gctx.stroke();
+}
+
+function drawTrace(f) {
+  // послесвечение: гасим прошлую трассу в прозрачность
+  if (reduceMotion) {
+    tctx.clearRect(0,0,W,H);
+  } else {
+    tctx.globalCompositeOperation = "destination-out";
+    tctx.globalAlpha = 0.30;
+    tctx.fillStyle = "#000";
+    tctx.fillRect(0,0,W,H);
+    tctx.globalAlpha = 1;
+    tctx.globalCompositeOperation = "source-over";
+  }
+  if (!f) return;
+
+  const ph = getCss("--phosphor");
+  const start = f.trigValid ? f.trigOffset : 0;
+  const count = f.n - start;
+  const x0 = 0, span = W;
+
+  tctx.lineWidth = 1.6;
+  tctx.strokeStyle = ph;
+  tctx.shadowColor = ph;
+  tctx.shadowBlur = reduceMotion ? 0 : 7;
+  tctx.beginPath();
+  for (let i = 0; i < count; i++) {
+    const x = x0 + (i / (count - 1)) * span;
+    const y = H - (f.samples[start + i] / ADC_MAX) * H;
+    i ? tctx.lineTo(x,y) : tctx.moveTo(x,y);
+  }
+  tctx.stroke();
+  tctx.shadowBlur = 0;
+
+  // маркер триггера — янтарный тик на левом крае на уровне DC
+  if (f.trigValid) {
+    const yt = H - (f.dc / ADC_MAX) * H;
+    tctx.fillStyle = getCss("--amber");
+    tctx.beginPath();
+    tctx.moveTo(0, yt); tctx.lineTo(9, yt-5); tctx.lineTo(9, yt+5);
+    tctx.closePath(); tctx.fill();
+  }
+}
+
+/* ============================================================
+   Циклы: продюсер кадров 60 Гц (как CM4) + рендер на rAF
+   ============================================================ */
+setInterval(() => { if (sim.run && !ws) onFrame(buildSimFrame()); }, 1000/60);
+
+let frames = 0, lastFpsT = performance.now();
+function loop(now) {
+  drawTrace(latest);
+  updateReadouts(latest);
+  frames++;
+  if (now - lastFpsT >= 500) {
+    document.getElementById("fps").textContent = Math.round(frames * 1000 / (now - lastFpsT));
+    frames = 0; lastFpsT = now;
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ============================================================
+   Чтение полей кадра в панели измерений (метрики из хедера!)
+   ============================================================ */
+function updateReadouts(f) {
+  if (!f) return;
+  set("seq", f.seq);
+  set("drops", dropCount);
+  set("vpp",  fmtV(code2v(f.vpp)));
+  set("rms",  fmtV(code2v(f.rms)));
+  set("dc",   fmtV(code2v(f.dc)));
+  set("vmin", fmtV(code2v(f.vmin)));
+  set("vmax", fmtV(code2v(f.vmax)));
+  // частоту выводит клиент из crossings (как и задумано — CM7 деривит)
+  const hz = f.crossings * f.rate / f.n;
+  set("freq", fmtHz(hz));
+  // нижняя шкала
+  const win = f.n / f.rate;                 // окно по времени, с
+  set("tdiv", fmtTime(win / DIVX));
+  set("srread", fmtHz(f.rate, "Sa/s"));
+  set("trgread", f.trigValid ? "rising ⟂ dc" : "free run");
+}
+
+/* ---- форматтеры с единицами ---- */
+function fmtV(v){ return Math.abs(v) >= 1 ? `${v.toFixed(3)}<small>V</small>` : `${(v*1000).toFixed(0)}<small>mV</small>`; }
+function fmtHz(hz, unit="Hz"){
+  if (hz >= 1e6) return `${(hz/1e6).toFixed(2)}<small>M${unit}</small>`;
+  if (hz >= 1e3) return `${(hz/1e3).toFixed(2)}<small>k${unit}</small>`;
+  return `${hz.toFixed(0)}<small>${unit}</small>`;
+}
+function fmtTime(s){
+  if (s >= 1e-3) return `${(s*1e3).toFixed(2)} ms`;
+  if (s >= 1e-6) return `${(s*1e6).toFixed(1)} µs`;
+  return `${(s*1e9).toFixed(0)} ns`;
+}
+
+/* ============================================================
+   Привязка управления
+   ============================================================ */
+function segGroup(id, fn) {
+  const g = document.getElementById(id);
+  g.addEventListener("click", e => {
+    const b = e.target.closest("button"); if (!b) return;
+    [...g.children].forEach(x => x.setAttribute("aria-pressed", x === b));
+    fn(b.dataset.v);
+  });
+}
+segGroup("points", v => sendCommand({ cmd:"set_points", n:+v }));
+segGroup("rate",   v => sendCommand({ cmd:"set_rate",  hz:+v }));
+segGroup("trig",   v => sendCommand({ cmd:"set_trig",  mode:v }));
+
+const runBtn = document.getElementById("run");
+runBtn.addEventListener("click", () => {
+  const running = runBtn.classList.toggle("running");
+  runBtn.textContent = running ? "Stop" : "Run";
+  sendCommand({ cmd: running ? "stream_on" : "stream_off" });
+});
+
+const dac = document.getElementById("dac");
+dac.addEventListener("input", () => {
+  document.getElementById("dacout").textContent = (dac.value/1000).toFixed(2) + " kHz";
+  sendCommand({ cmd:"set_dac", hz:+dac.value });
+});
+
+/* ---- статус соединения ---- */
+function setLink(live){
+  document.getElementById("dot").classList.toggle("live", live);
+  document.getElementById("link").textContent = live ? "live" : "down";
+  document.getElementById("srcbadge").textContent = live ? "Live" : "Sim";
+}
+
+/* ---- утилиты ---- */
+function set(id, html){ document.getElementById(id).innerHTML = html; }
+function getCss(name){ return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+/* ---- старт ---- */
+addEventListener("resize", resize);
+resize();
+connectScope(`ws://${location.host}/scope`);
+</script>
+</body>

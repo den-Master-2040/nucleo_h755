@@ -1,0 +1,660 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NUCLEO-H755 Scope</title>
+<style>
+  :root{
+    --bg:#080b0c; --panel:#0e1518; --panel-2:#0b1113; --header:#0a1012;
+    --line:#1b2a2d; --phosphor:#45e6b0; --phosphor-dim:#1f5c4c; --amber:#f5a623;
+    --text:#cbd6d6; --dim:#61757a;
+    --grat:rgba(120,200,180,0.085); --grat-axis:rgba(120,200,180,0.20);
+    --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    --mono:ui-monospace,"SF Mono","JetBrains Mono","Cascadia Code",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--sans);
+    display:flex;flex-direction:column;min-height:100%}
+
+  /* ---------- header ---------- */
+  header{display:flex;align-items:center;gap:6px;background:var(--header);
+    border-bottom:1px solid var(--line);padding:0 16px;height:52px;flex:0 0 auto}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--mono);
+    font-size:13px;letter-spacing:.06em;color:var(--text);padding-right:18px}
+  .brand svg{display:block}
+  nav{display:flex;gap:2px;height:100%}
+  nav a{display:flex;align-items:center;padding:0 16px;height:100%;color:var(--dim);
+    text-decoration:none;font-size:13px;letter-spacing:.03em;
+    border-bottom:2px solid transparent;cursor:pointer}
+  nav a:hover{color:var(--text)}
+  nav a.active{color:var(--phosphor);border-bottom-color:var(--phosphor)}
+  nav a:focus-visible{outline:2px solid var(--phosphor);outline-offset:-2px}
+  .link{margin-left:auto;display:flex;align-items:center;gap:9px;
+    font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .dot{width:7px;height:7px;border-radius:50%;background:var(--dim)}
+  .dot.live{background:var(--phosphor);box-shadow:0 0 8px var(--phosphor)}
+
+  /* ---------- view container ---------- */
+  main{flex:1 1 auto;min-height:0;display:flex}
+  .view{display:none;flex:1;min-height:0}
+  .view.active{display:grid}
+
+  /* scope-style pages share this grid */
+  .scopegrid{
+    grid-template-columns:1fr 248px;grid-template-rows:auto 1fr auto;
+    grid-template-areas:"top side""scope side""scale side";
+    gap:1px;background:var(--line);padding:1px;width:100%}
+  .pane{background:var(--bg)}
+
+  .topbar{grid-area:top;background:var(--panel-2);display:flex;align-items:center;
+    gap:22px;padding:10px 16px;font-family:var(--mono);font-size:12px}
+  .topbar .k{color:var(--dim);font-family:var(--sans);font-size:10px;
+    text-transform:uppercase;letter-spacing:.08em;margin-right:7px}
+  .topbar .v{font-variant-numeric:tabular-nums}
+  .legend{margin-left:auto;display:flex;gap:16px;align-items:center;font-size:11px}
+  .legend span{display:flex;align-items:center;gap:6px;color:var(--dim)}
+  .swatch{width:14px;height:2px;border-radius:2px}
+
+  .canvaswrap{grid-area:scope;position:relative;background:var(--bg);overflow:hidden}
+  .canvaswrap canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+
+  .scalebar{grid-area:scale;background:var(--panel-2);display:flex;gap:28px;
+    align-items:center;padding:9px 16px;font-family:var(--mono);font-size:12px}
+  .scalebar .k{color:var(--dim);font-family:var(--sans);font-size:10px;
+    text-transform:uppercase;letter-spacing:.08em;margin-right:7px}
+  .scalebar .v{font-variant-numeric:tabular-nums}
+
+  .side{grid-area:side;background:var(--panel);padding:14px;overflow:auto}
+  .h{font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--dim);
+    margin:0 0 12px}
+  .h+.h,.block .h{margin-top:20px}
+
+  .meas-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin-bottom:6px}
+  .m{display:flex;flex-direction:column;gap:3px}
+  .m .lbl{font-size:10px;color:var(--dim);letter-spacing:.05em;text-transform:uppercase}
+  .m .num{font-family:var(--mono);font-size:19px;color:var(--phosphor);
+    font-variant-numeric:tabular-nums;line-height:1}
+  .m .num small{font-size:11px;color:var(--dim);margin-left:2px}
+  .m.amber .num{color:var(--amber)}
+
+  .ctl{margin-bottom:16px}
+  .ctl>.lbl{display:block;font-size:10px;color:var(--dim);letter-spacing:.05em;
+    text-transform:uppercase;margin-bottom:7px}
+  .seg{display:flex;border:1px solid var(--line);border-radius:4px;overflow:hidden}
+  .seg button{flex:1;background:transparent;color:var(--dim);border:0;padding:7px 0;
+    font-family:var(--mono);font-size:12px;cursor:pointer;border-right:1px solid var(--line)}
+  .seg button:last-child{border-right:0}
+  .seg button:hover{color:var(--text);background:rgba(255,255,255,.03)}
+  .seg button[aria-pressed="true"]{background:color-mix(in srgb,var(--phosphor) 16%,transparent);
+    color:var(--phosphor)}
+  .seg button:focus-visible{outline:2px solid var(--phosphor);outline-offset:-2px}
+
+  .run{width:100%;padding:12px;border:0;border-radius:4px;cursor:pointer;
+    font-family:var(--mono);font-size:14px;letter-spacing:.04em;
+    background:var(--amber);color:#1a1205;font-weight:600;margin-bottom:16px}
+  .run.running{background:transparent;color:var(--phosphor);
+    border:1px solid color-mix(in srgb,var(--phosphor) 45%,transparent)}
+  .run:focus-visible{outline:2px solid #fff;outline-offset:2px}
+
+  .slider{display:flex;align-items:center;gap:10px}
+  .slider input{flex:1;accent-color:var(--phosphor)}
+  .slider .out{font-family:var(--mono);font-size:12px;color:var(--text);
+    min-width:64px;text-align:right;font-variant-numeric:tabular-nums}
+
+  /* ---------- settings page ---------- */
+  .settings{padding:28px;overflow:auto;width:100%;justify-content:center}
+  .settings-inner{width:100%;max-width:880px;display:grid;
+    grid-template-columns:1fr 1fr;gap:18px;align-content:start}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:18px}
+  .card.wide{grid-column:1/-1}
+  .card h3{margin:0 0 16px;font-size:11px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--phosphor);font-weight:600}
+  .row{display:flex;align-items:center;justify-content:space-between;gap:14px;
+    padding:9px 0;border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:0}
+  .row label{font-size:13px;color:var(--text)}
+  .row .sub{font-size:11px;color:var(--dim);margin-top:2px}
+  input[type=text],input[type=number]{background:var(--panel-2);border:1px solid var(--line);
+    color:var(--text);font-family:var(--mono);font-size:13px;padding:7px 10px;border-radius:4px;
+    width:180px;text-align:right}
+  input:focus{outline:2px solid var(--phosphor);outline-offset:-1px}
+  .btn{background:transparent;border:1px solid var(--line);color:var(--text);
+    font-family:var(--mono);font-size:13px;padding:8px 16px;border-radius:4px;cursor:pointer}
+  .btn:hover{border-color:var(--phosphor);color:var(--phosphor)}
+  .btn.warn:hover{border-color:var(--amber);color:var(--amber)}
+  .btn:focus-visible{outline:2px solid var(--phosphor);outline-offset:2px}
+  .sys{font-family:var(--mono);font-size:13px;color:var(--text);font-variant-numeric:tabular-nums}
+
+  /* toggle */
+  .toggle{position:relative;width:40px;height:22px;flex:0 0 auto}
+  .toggle input{position:absolute;opacity:0;width:100%;height:100%;margin:0;cursor:pointer}
+  .track{position:absolute;inset:0;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:22px;transition:.15s}
+  .track::after{content:"";position:absolute;width:16px;height:16px;border-radius:50%;
+    background:var(--dim);top:2px;left:2px;transition:.15s}
+  .toggle input:checked+.track{background:color-mix(in srgb,var(--phosphor) 22%,transparent);
+    border-color:var(--phosphor)}
+  .toggle input:checked+.track::after{background:var(--phosphor);left:20px}
+
+  .note{font-size:11px;color:var(--dim);margin-top:14px;line-height:1.5}
+
+  @media(max-width:760px){
+    nav a{padding:0 11px}
+    .scopegrid{grid-template-columns:1fr;
+      grid-template-areas:"top""scope""scale""side"}
+    .canvaswrap{min-height:42vh}
+    .settings-inner{grid-template-columns:1fr}
+    .brand span{display:none}
+  }
+</style>
+
+<body>
+  <header>
+    <div class="brand">
+      <svg width="26" height="14" viewBox="0 0 26 14" fill="none">
+        <path d="M1 7 Q5 -3 9 7 T17 7 T25 7" stroke="#45e6b0" stroke-width="1.6"/>
+      </svg>
+      <span>NUCLEO-H755ZI-Q</span>
+    </div>
+    <nav id="nav">
+      <a data-view="main" class="active">Main</a>
+      <a data-view="dac">DAC</a>
+      <a data-view="pwm">PWM</a>
+      <a data-view="adc">ADC</a>
+      <a data-view="settings">Settings</a>
+    </nav>
+    <div class="link"><span class="dot" id="dot"></span><span id="linktxt">simulated</span></div>
+  </header>
+
+  <main>
+    <!-- ===================== MAIN ===================== -->
+    <section class="view active scopegrid" id="view-main">
+      <div class="topbar pane">
+        <div><span class="k">Frame</span><span class="v" id="m-seq">—</span></div>
+        <div><span class="k">Dropped</span><span class="v" id="m-drops">0</span></div>
+        <div><span class="k">FPS</span><span class="v" id="m-fps">0</span></div>
+      </div>
+      <div class="canvaswrap pane"><canvas id="main-grat"></canvas><canvas id="main-trace"></canvas></div>
+      <div class="scalebar pane">
+        <div><span class="k">Time / div</span><span class="v" id="m-tdiv">—</span></div>
+        <div><span class="k">Sample rate</span><span class="v" id="m-sr">—</span></div>
+        <div><span class="k">Trigger</span><span class="v" id="m-trg">—</span></div>
+      </div>
+      <div class="side pane">
+        <p class="h">Measure</p>
+        <div class="meas-grid">
+          <div class="m"><span class="lbl">Vpp</span><span class="num" id="m-vpp">—</span></div>
+          <div class="m"><span class="lbl">RMS</span><span class="num" id="m-rms">—</span></div>
+          <div class="m"><span class="lbl">Frequency</span><span class="num" id="m-freq">—</span></div>
+          <div class="m"><span class="lbl">DC level</span><span class="num" id="m-dc">—</span></div>
+          <div class="m"><span class="lbl">Min</span><span class="num" id="m-min">—</span></div>
+          <div class="m"><span class="lbl">Max</span><span class="num" id="m-max">—</span></div>
+        </div>
+        <p class="h">Acquire</p>
+        <button class="run" id="run">Run</button>
+        <div class="ctl"><span class="lbl">Points</span>
+          <div class="seg" data-cmd="points" role="group" aria-label="Points">
+            <button data-v="256">256</button>
+            <button data-v="512" aria-pressed="true">512</button>
+            <button data-v="1024">1024</button></div></div>
+        <div class="ctl"><span class="lbl">Sample rate</span>
+          <div class="seg" data-cmd="rate" role="group" aria-label="Sample rate">
+            <button data-v="50000">50k</button>
+            <button data-v="100000" aria-pressed="true">100k</button>
+            <button data-v="500000">500k</button></div></div>
+        <div class="ctl"><span class="lbl">Trigger</span>
+          <div class="seg" data-cmd="trig" role="group" aria-label="Trigger">
+            <button data-v="rising" aria-pressed="true">Rising</button>
+            <button data-v="free">Free</button></div></div>
+      </div>
+    </section>
+
+    <!-- ===================== DAC ===================== -->
+    <section class="view scopegrid" id="view-dac">
+      <div class="topbar pane">
+        <div><span class="k">Output</span><span class="v">commanded waveform</span></div>
+        <div class="legend"><span><i class="swatch" style="background:var(--amber)"></i>DAC out</span></div>
+      </div>
+      <div class="canvaswrap pane"><canvas id="dac-grat"></canvas><canvas id="dac-trace"></canvas></div>
+      <div class="scalebar pane">
+        <div><span class="k">Frequency</span><span class="v" id="d-freq">—</span></div>
+        <div><span class="k">Vpp</span><span class="v" id="d-vpp">—</span></div>
+        <div><span class="k">Offset</span><span class="v" id="d-off">—</span></div>
+      </div>
+      <div class="side pane">
+        <p class="h">Generator</p>
+        <div class="ctl"><span class="lbl">Waveform</span>
+          <div class="seg" id="dac-wave" role="group" aria-label="Waveform">
+            <button data-v="sine" aria-pressed="true">Sine</button>
+            <button data-v="tri">Tri</button>
+            <button data-v="sq">Sq</button>
+            <button data-v="saw">Saw</button></div></div>
+        <div class="ctl"><span class="lbl">Frequency</span>
+          <div class="slider"><input type="range" id="dac-f" min="100" max="20000" step="100" value="1000">
+            <span class="out" id="dac-fo">1.00 kHz</span></div></div>
+        <div class="ctl"><span class="lbl">Amplitude</span>
+          <div class="slider"><input type="range" id="dac-a" min="0.05" max="1.65" step="0.01" value="1.20">
+            <span class="out" id="dac-ao">1.20 V</span></div></div>
+        <div class="ctl"><span class="lbl">Offset</span>
+          <div class="slider"><input type="range" id="dac-o" min="0" max="3.3" step="0.01" value="1.65">
+            <span class="out" id="dac-oo">1.65 V</span></div></div>
+        <p class="note">DAC can't read itself back — this is the commanded buffer. It's looped to the ADC input, so changes here show up on Main.</p>
+      </div>
+    </section>
+
+    <!-- ===================== PWM ===================== -->
+    <section class="view scopegrid" id="view-pwm">
+      <div class="topbar pane">
+        <div><span class="k">Output</span><span class="v">PWM channel</span></div>
+        <div class="legend"><span><i class="swatch" style="background:var(--phosphor)"></i>PWM</span></div>
+      </div>
+      <div class="canvaswrap pane"><canvas id="pwm-grat"></canvas><canvas id="pwm-trace"></canvas></div>
+      <div class="scalebar pane">
+        <div><span class="k">Period</span><span class="v" id="p-per">—</span></div>
+        <div><span class="k">High</span><span class="v" id="p-hi">—</span></div>
+        <div><span class="k">Low</span><span class="v" id="p-lo">—</span></div>
+      </div>
+      <div class="side pane">
+        <p class="h">PWM</p>
+        <div class="meas-grid">
+          <div class="m"><span class="lbl">Frequency</span><span class="num" id="p-freq">—</span></div>
+          <div class="m amber"><span class="lbl">Duty</span><span class="num" id="p-duty">—</span></div>
+        </div>
+        <p class="h">Control</p>
+        <div class="ctl"><span class="lbl">Frequency</span>
+          <div class="slider"><input type="range" id="pwm-f" min="1000" max="200000" step="1000" value="20000">
+            <span class="out" id="pwm-fo">20.0 kHz</span></div></div>
+        <div class="ctl"><span class="lbl">Duty cycle</span>
+          <div class="slider"><input type="range" id="pwm-d" min="0" max="100" step="1" value="50">
+            <span class="out" id="pwm-do">50 %</span></div></div>
+      </div>
+    </section>
+
+    <!-- ===================== ADC ===================== -->
+    <section class="view scopegrid" id="view-adc">
+      <div class="topbar pane">
+        <div><span class="k">Acquisition</span><span class="v">raw vs processed</span></div>
+        <div class="legend">
+          <span><i class="swatch" style="background:var(--phosphor-dim)"></i>raw</span>
+          <span><i class="swatch" style="background:var(--phosphor)"></i>processed</span>
+        </div>
+      </div>
+      <div class="canvaswrap pane"><canvas id="adc-grat"></canvas><canvas id="adc-trace"></canvas></div>
+      <div class="scalebar pane">
+        <div><span class="k">Time / div</span><span class="v" id="a-tdiv">—</span></div>
+        <div><span class="k">Sample rate</span><span class="v" id="a-sr">—</span></div>
+        <div><span class="k">Noise (rms)</span><span class="v" id="a-noise">—</span></div>
+      </div>
+      <div class="side pane">
+        <p class="h">Measure</p>
+        <div class="meas-grid">
+          <div class="m"><span class="lbl">Vpp</span><span class="num" id="a-vpp">—</span></div>
+          <div class="m"><span class="lbl">RMS</span><span class="num" id="a-rms">—</span></div>
+          <div class="m"><span class="lbl">Frequency</span><span class="num" id="a-freq">—</span></div>
+          <div class="m amber"><span class="lbl">SNR est.</span><span class="num" id="a-snr">—</span></div>
+        </div>
+        <p class="h">Processing</p>
+        <div class="ctl"><span class="lbl">Filter (CM7)</span>
+          <div class="seg" id="adc-filt" role="group" aria-label="Filter">
+            <button data-v="0" aria-pressed="true">None</button>
+            <button data-v="8">Avg 8</button>
+            <button data-v="24">Avg 24</button></div></div>
+        <div class="ctl"><span class="lbl">Sample rate</span>
+          <div class="seg" data-cmd="rate" role="group" aria-label="Sample rate">
+            <button data-v="50000">50k</button>
+            <button data-v="100000" aria-pressed="true">100k</button>
+            <button data-v="500000">500k</button></div></div>
+      </div>
+    </section>
+
+    <!-- ===================== SETTINGS ===================== -->
+    <section class="view settings" id="view-settings">
+      <div class="settings-inner">
+        <div class="card">
+          <h3>Network</h3>
+          <div class="row"><div><label for="s-ip">Device IP</label><div class="sub">where CM7 serves the page</div></div>
+            <input type="text" id="s-ip" value="192.168.1.50"></div>
+          <div class="row"><div><label for="s-ws">WebSocket path</label><div class="sub">stream + control endpoint</div></div>
+            <input type="text" id="s-ws" value="/scope"></div>
+          <div class="row"><div><label>Connection</label><div class="sub" id="s-status">simulated — not connected</div></div>
+            <button class="btn" id="s-connect">Connect</button></div>
+        </div>
+
+        <div class="card">
+          <h3>Calibration</h3>
+          <div class="row"><div><label for="s-vref">ADC reference</label><div class="sub">volts at full scale</div></div>
+            <input type="number" id="s-vref" value="3.3" step="0.01" min="1" max="5"></div>
+          <div class="row"><label>Resolution</label>
+            <div class="seg" id="s-res" style="width:160px">
+              <button data-v="4095" aria-pressed="true">12-bit</button>
+              <button data-v="65535">16-bit</button></div></div>
+        </div>
+
+        <div class="card">
+          <h3>Display</h3>
+          <div class="row"><div><label for="s-pers">Phosphor persistence</label><div class="sub">afterglow trail on Main</div></div>
+            <span class="toggle"><input type="checkbox" id="s-pers" checked><span class="track"></span></span></div>
+        </div>
+
+        <div class="card">
+          <h3>System</h3>
+          <div class="row"><label>Firmware</label><span class="sys" id="s-fw">cm7 0.3.1 / cm4 0.3.1</span></div>
+          <div class="row"><label>Uptime</label><span class="sys" id="s-up">00:00:00</span></div>
+          <div class="row"><div><label>Reset acquisition</label><div class="sub">reinit ADC/DMA, keep core running</div></div>
+            <button class="btn" id="s-reset">Reset</button></div>
+          <div class="row"><div><label>Reboot device</label><div class="sub">full restart of both cores</div></div>
+            <button class="btn warn" id="s-reboot">Reboot</button></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+<script>
+"use strict";
+
+/* ===== тракт ===== */
+let VREF=3.3, ADC_MAX=4095;
+const code2v=c=>(c/ADC_MAX)*VREF;
+
+/* ===== парсер кадра — раскладка ipc_frame_t ===== */
+function parseFrame(buf){
+  const dv=new DataView(buf);
+  const f={seq:dv.getUint32(0,true),n:dv.getUint16(4,true),flags:dv.getUint16(6,true),
+    rate:dv.getUint32(8,true),trigOffset:dv.getInt32(12,true),dc:dv.getUint16(16,true),
+    vmin:dv.getUint16(18,true),vmax:dv.getUint16(20,true),vpp:dv.getUint16(22,true),
+    rms:dv.getFloat32(24,true),crossings:dv.getUint32(28,true)};
+  f.trigValid=!!(f.flags&1);
+  f.samples=new Uint16Array(buf,32,f.n);
+  return f;
+}
+
+/* ===== состояние ===== */
+const dac={wave:"sine",freq:1000,amp:1.20,off:1.65};
+const pwm={freq:20000,duty:50};
+const sim={n:512,rate:100000,trig:"rising",phase:0,seq:0,run:false};
+let filterN=0, persistence=true;
+
+/* ===== симулятор кадра (проводной формат -> parseFrame) ===== */
+function dacShape(t){ // t in [0,1)
+  switch(dac.wave){
+    case"tri": return 2*Math.abs(2*(t-Math.floor(t+0.5)))-1;
+    case"sq":  return (t%1)<0.5?1:-1;
+    case"saw": return 2*(t-Math.floor(t+0.5));
+    default:   return Math.sin(2*Math.PI*t);
+  }
+}
+function buildSimFrame(){
+  const{n,rate,freq}=sim;
+  const buf=new ArrayBuffer(32+2*n),dv=new DataView(buf),s=new Uint16Array(buf,32,n);
+  const dcCode=Math.round(dac.off/VREF*ADC_MAX);
+  const ampCode=dac.amp/VREF*ADC_MAX;
+  const dt=freq/rate;
+  let mn=4095,mx=0,sum=0,sumsq=0,cross=0,prev=dcCode,trig=-1;
+  for(let i=0;i<n;i++){
+    sim.phase+=dt;
+    let v=dacShape(sim.phase)+(Math.random()-0.5)*0.035;
+    let c=Math.max(0,Math.min(4095,Math.round(dcCode+ampCode*v)));
+    s[i]=c;
+    if(c<mn)mn=c; if(c>mx)mx=c; sum+=c; sumsq+=(c-dcCode)*(c-dcCode);
+    if(prev<dcCode&&c>=dcCode){cross++; if(trig<0)trig=i;}
+    prev=c;
+  }
+  const dc=Math.round(sum/n), rms=Math.sqrt(sumsq/n);
+  const rising=sim.trig==="rising"&&trig>=0;
+  dv.setUint32(0,++sim.seq,true); dv.setUint16(4,n,true);
+  dv.setUint16(6,rising?3:2,true); dv.setUint32(8,rate,true);
+  dv.setInt32(12,rising?trig:0,true); dv.setUint16(16,dc,true);
+  dv.setUint16(18,mn,true); dv.setUint16(20,mx,true); dv.setUint16(22,mx-mn,true);
+  dv.setFloat32(24,rms,true); dv.setUint32(28,cross,true);
+  return buf;
+}
+
+/* ===== конвейер «свежий кадр» ===== */
+let latest=null, prevSeq=null, dropCount=0;
+function onFrame(buf){
+  const f=parseFrame(buf);
+  if(prevSeq!==null){const gap=(f.seq-prevSeq-1)&0xffffffff; if(gap>0&&gap<1e6)dropCount+=gap;}
+  prevSeq=f.seq; latest=f;
+}
+
+/* ===== WebSocket (раскомментировать для живого режима) ===== */
+let ws=null;
+function connectScope(url){
+  ws=new WebSocket(url); ws.binaryType="arraybuffer";
+  ws.onopen=()=>setLink(true); ws.onclose=()=>setLink(false);
+  ws.onmessage=e=>{ typeof e.data==="string"?handleControl(JSON.parse(e.data)):onFrame(e.data); };
+}
+function handleControl(m){}
+function sendCommand(c){
+  if(ws&&ws.readyState===1){ws.send(JSON.stringify(c));return;}
+  switch(c.cmd){
+    case"stream_on":sim.run=true;break; case"stream_off":sim.run=false;break;
+    case"set_points":sim.n=c.n;break; case"set_rate":sim.rate=c.hz;break;
+    case"set_trig":sim.trig=c.mode;break;
+    case"set_dac":dac.freq=c.hz;sim.freq=c.hz;break;
+    case"set_pwm":break; case"reset_state":sim.seq=0;prevSeq=null;dropCount=0;break;
+  }
+}
+
+/* ===== рендер-помощники ===== */
+const DIVX=10,DIVY=8;
+const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function Scope(gratId,traceId){
+  const grat=document.getElementById(gratId),trace=document.getElementById(traceId);
+  const gctx=grat.getContext("2d"),tctx=trace.getContext("2d");
+  let W=0,H=0,dpr=1;
+  function resize(){
+    const r=trace.parentElement.getBoundingClientRect();
+    if(!r.width)return;
+    dpr=Math.min(2,window.devicePixelRatio||1); W=r.width; H=r.height;
+    for(const c of[grat,trace]){c.width=W*dpr;c.height=H*dpr;}
+    gctx.setTransform(dpr,0,0,dpr,0,0); tctx.setTransform(dpr,0,0,dpr,0,0);
+    drawGrat();
+  }
+  function drawGrat(){
+    gctx.clearRect(0,0,W,H); gctx.lineWidth=1; gctx.strokeStyle=css("--grat");
+    gctx.beginPath();
+    for(let i=1;i<DIVX;i++){const x=W/DIVX*i;gctx.moveTo(x,0);gctx.lineTo(x,H);}
+    for(let i=1;i<DIVY;i++){const y=H/DIVY*i;gctx.moveTo(0,y);gctx.lineTo(W,y);}
+    gctx.stroke();
+    gctx.strokeStyle=css("--grat-axis"); gctx.beginPath();
+    gctx.moveTo(W/2,0);gctx.lineTo(W/2,H); gctx.moveTo(0,H/2);gctx.lineTo(W,H/2);
+    gctx.stroke();
+    gctx.beginPath();
+    for(let i=0;i<=DIVX*5;i++){const x=W/(DIVX*5)*i;gctx.moveTo(x,H/2-3);gctx.lineTo(x,H/2+3);}
+    for(let i=0;i<=DIVY*5;i++){const y=H/(DIVY*5)*i;gctx.moveTo(W/2-3,y);gctx.lineTo(W/2+3,y);}
+    gctx.stroke();
+  }
+  function fade(amt){
+    tctx.globalCompositeOperation="destination-out"; tctx.globalAlpha=amt;
+    tctx.fillStyle="#000"; tctx.fillRect(0,0,W,H);
+    tctx.globalAlpha=1; tctx.globalCompositeOperation="source-over";
+  }
+  function clear(){ tctx.clearRect(0,0,W,H); }
+  // getY: fn(i)->norm[0..1] bottom..top ; count points across full width
+  function plot(getY,count,color,glow){
+    tctx.lineWidth=glow?1.6:1.3; tctx.strokeStyle=color;
+    tctx.shadowColor=color; tctx.shadowBlur=(glow&&!reduce)?7:0;
+    tctx.beginPath();
+    for(let i=0;i<count;i++){
+      const x=(i/(count-1))*W, y=H-getY(i)*H;
+      i?tctx.lineTo(x,y):tctx.moveTo(x,y);
+    }
+    tctx.stroke(); tctx.shadowBlur=0;
+  }
+  function trigMark(norm){
+    tctx.fillStyle=css("--amber"); const y=H-norm*H;
+    tctx.beginPath(); tctx.moveTo(0,y);tctx.lineTo(9,y-5);tctx.lineTo(9,y+5);
+    tctx.closePath(); tctx.fill();
+  }
+  return {resize, fade, clear, plot, trigMark, get W(){return W}, get H(){return H}};
+}
+const scopes={
+  main:Scope("main-grat","main-trace"),
+  dac:Scope("dac-grat","dac-trace"),
+  pwm:Scope("pwm-grat","pwm-trace"),
+  adc:Scope("adc-grat","adc-trace"),
+};
+
+/* ===== страницы: рендер ===== */
+function renderMain(){
+  const sc=scopes.main, f=latest;
+  if(persistence&&!reduce) sc.fade(0.30); else sc.clear();
+  if(!f)return;
+  const start=f.trigValid?f.trigOffset:0, count=f.n-start;
+  sc.plot(i=>f.samples[start+i]/ADC_MAX, count, css("--phosphor"), true);
+  if(f.trigValid) sc.trigMark(f.dc/ADC_MAX);
+  // readouts
+  set("m-seq",f.seq); set("m-drops",dropCount);
+  set("m-vpp",fmtV(code2v(f.vpp))); set("m-rms",fmtV(code2v(f.rms)));
+  set("m-dc",fmtV(code2v(f.dc))); set("m-min",fmtV(code2v(f.vmin)));
+  set("m-max",fmtV(code2v(f.vmax)));
+  set("m-freq",fmtHz(f.crossings*f.rate/f.n));
+  set("m-tdiv",fmtT(f.n/f.rate/DIVX)); set("m-sr",fmtHz(f.rate,"Sa/s"));
+  set("m-trg",f.trigValid?"rising":"free run");
+}
+
+function movavg(arr,n,w){
+  if(w<=1)return i=>arr[i];
+  return i=>{let s=0,c=0; for(let k=-(w>>1);k<=(w>>1);k++){const j=i+k; if(j>=0&&j<n){s+=arr[j];c++;}} return s/c;};
+}
+function renderAdc(){
+  const sc=scopes.adc, f=latest; sc.clear();
+  if(!f)return;
+  const start=f.trigValid?f.trigOffset:0, count=f.n-start;
+  const raw=f.samples;
+  // raw (dim)
+  sc.plot(i=>raw[start+i]/ADC_MAX, count, css("--phosphor-dim"), false);
+  // processed (bright) — moving average как стенд-ин фильтра CM7
+  const proc=movavg(raw,f.n,filterN);
+  sc.plot(i=>proc(start+i)/ADC_MAX, count, css("--phosphor"), true);
+  if(f.trigValid) sc.trigMark(f.dc/ADC_MAX);
+  // noise rms = raw-proc
+  let s=0; for(let i=0;i<f.n;i++){const d=raw[i]-proc(i); s+=d*d;}
+  const noise=Math.sqrt(s/f.n);
+  const snr=noise>0?20*Math.log10((f.vpp/2)/noise):99;
+  set("a-vpp",fmtV(code2v(f.vpp))); set("a-rms",fmtV(code2v(f.rms)));
+  set("a-freq",fmtHz(f.crossings*f.rate/f.n)); set("a-snr",snr.toFixed(1)+"<small>dB</small>");
+  set("a-tdiv",fmtT(f.n/f.rate/DIVX)); set("a-sr",fmtHz(f.rate,"Sa/s"));
+  set("a-noise",fmtV(code2v(noise)));
+}
+
+function renderDac(){
+  const sc=scopes.dac; sc.clear();
+  const periods=3, N=600;
+  sc.plot(i=>{const t=i/(N-1)*periods; return (dac.off+dac.amp*dacShape(t))/VREF;}, N, css("--amber"), true);
+  set("d-freq",fmtHz(dac.freq)); set("d-vpp",fmtV(2*dac.amp)); set("d-off",fmtV(dac.off));
+}
+
+function renderPwm(){
+  const sc=scopes.pwm; sc.clear();
+  const periods=4, N=800, d=pwm.duty/100;
+  sc.plot(i=>{const t=(i/(N-1)*periods)%1; return (t<d?0.86:0.14);}, N, css("--phosphor"), true);
+  const per=1/pwm.freq;
+  set("p-freq",fmtHz(pwm.freq)); set("p-duty",pwm.duty+"<small>%</small>");
+  set("p-per",fmtT(per)); set("p-hi",fmtT(per*d)); set("p-lo",fmtT(per*(1-d)));
+}
+
+/* ===== циклы ===== */
+setInterval(()=>{ if(sim.run&&!ws) onFrame(buildSimFrame()); },1000/60);
+let cur="main",frames=0,lastT=performance.now();
+function loop(now){
+  if(cur==="main")renderMain(); else if(cur==="adc")renderAdc();
+  frames++;
+  if(now-lastT>=500){ set("m-fps",Math.round(frames*1000/(now-lastT))); frames=0; lastT=now; }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* ===== роутинг ===== */
+const nav=document.getElementById("nav");
+function show(name){
+  if(!document.getElementById("view-"+name))name="main";
+  cur=name;
+  document.querySelectorAll(".view").forEach(v=>v.classList.toggle("active",v.id==="view-"+name));
+  document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("active",a.dataset.view===name));
+  const sc=scopes[name]; if(sc){ requestAnimationFrame(()=>{ sc.resize();
+    if(name==="dac")renderDac(); else if(name==="pwm")renderPwm(); }); }
+}
+nav.addEventListener("click",e=>{const a=e.target.closest("a");if(!a)return;
+  location.hash=a.dataset.view;});
+addEventListener("hashchange",()=>show(location.hash.slice(1)));
+
+/* ===== управление ===== */
+function segGroup(el,fn){
+  el.addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;
+    [...el.children].forEach(x=>x.setAttribute("aria-pressed",x===b)); fn(b.dataset.v);});
+}
+// acquire-сегменты (на Main и ADC) — общий data-cmd
+document.querySelectorAll('.seg[data-cmd]').forEach(el=>{
+  const cmd=el.dataset.cmd;
+  segGroup(el,v=>{
+    if(cmd==="points")sendCommand({cmd:"set_points",n:+v});
+    if(cmd==="rate"){sendCommand({cmd:"set_rate",hz:+v});
+      // синхронизируем оба rate-сегмента
+      document.querySelectorAll('.seg[data-cmd="rate"] button').forEach(b=>
+        b.setAttribute("aria-pressed",b.dataset.v===v));}
+    if(cmd==="trig")sendCommand({cmd:"set_trig",mode:v});
+  });
+});
+segGroup(document.getElementById("dac-wave"),v=>{dac.wave=v;renderDac();});
+segGroup(document.getElementById("adc-filt"),v=>{filterN=+v;});
+
+const run=document.getElementById("run");
+run.addEventListener("click",()=>{const on=run.classList.toggle("running");
+  run.textContent=on?"Stop":"Run"; sendCommand({cmd:on?"stream_on":"stream_off"});});
+
+function slider(id,outId,fmt,fn){
+  const el=document.getElementById(id),out=document.getElementById(outId);
+  el.addEventListener("input",()=>{out.textContent=fmt(+el.value);fn(+el.value);});
+}
+slider("dac-f","dac-fo",v=>(v/1000).toFixed(2)+" kHz",v=>{sendCommand({cmd:"set_dac",hz:v});renderDac();});
+slider("dac-a","dac-ao",v=>v.toFixed(2)+" V",v=>{dac.amp=v;renderDac();});
+slider("dac-o","dac-oo",v=>v.toFixed(2)+" V",v=>{dac.off=v;renderDac();});
+slider("pwm-f","pwm-fo",v=>(v/1000).toFixed(1)+" kHz",v=>{pwm.freq=v;sendCommand({cmd:"set_pwm",hz:v,duty:pwm.duty});renderPwm();});
+slider("pwm-d","pwm-do",v=>v+" %",v=>{pwm.duty=v;sendCommand({cmd:"set_pwm",hz:pwm.freq,duty:v});renderPwm();});
+
+/* ===== settings ===== */
+function setLink(live){
+  document.getElementById("dot").classList.toggle("live",live);
+  document.getElementById("linktxt").textContent=live?"live":"down";
+  document.getElementById("s-status").textContent=live?"connected":"disconnected";
+}
+document.getElementById("s-connect").addEventListener("click",()=>{
+  const ip=document.getElementById("s-ip").value.trim();
+  const path=document.getElementById("s-ws").value.trim();
+  document.getElementById("s-status").textContent="connecting…";
+  try{ connectScope(`ws://${ip}${path}`); }catch(e){ document.getElementById("s-status").textContent="bad address"; }
+});
+document.getElementById("s-vref").addEventListener("change",e=>{VREF=+e.target.value||3.3;});
+segGroup(document.getElementById("s-res"),v=>{ADC_MAX=+v;});
+document.getElementById("s-pers").addEventListener("change",e=>{persistence=e.target.checked;});
+document.getElementById("s-reset").addEventListener("click",()=>sendCommand({cmd:"reset_state"}));
+document.getElementById("s-reboot").addEventListener("click",()=>{
+  if(confirm("Reboot both cores? Acquisition will stop.")) sendCommand({cmd:"reboot"});
+});
+// uptime
+const t0=Date.now();
+setInterval(()=>{const s=(Date.now()-t0)/1000|0;
+  const p=n=>String(n).padStart(2,"0");
+  document.getElementById("s-up").textContent=`${p(s/3600|0)}:${p((s/60|0)%60)}:${p(s%60)}`;},1000);
+
+/* ===== форматтеры ===== */
+function fmtV(v){return Math.abs(v)>=1?`${v.toFixed(3)}<small>V</small>`:`${(v*1000).toFixed(0)}<small>mV</small>`;}
+function fmtHz(hz,u="Hz"){ if(hz>=1e6)return`${(hz/1e6).toFixed(2)}<small>M${u}</small>`;
+  if(hz>=1e3)return`${(hz/1e3).toFixed(2)}<small>k${u}</small>`; return`${hz.toFixed(0)}<small>${u}</small>`;}
+function fmtT(s){ if(s>=1e-3)return`${(s*1e3).toFixed(2)} ms`;
+  if(s>=1e-6)return`${(s*1e6).toFixed(1)} µs`; return`${(s*1e9).toFixed(0)} ns`;}
+function set(id,h){const el=document.getElementById(id); if(el)el.innerHTML=h;}
+
+/* ===== старт ===== */
+addEventListener("resize",()=>{const sc=scopes[cur];if(sc)sc.resize();
+  if(cur==="dac")renderDac(); if(cur==="pwm")renderPwm();});
+show(location.hash.slice(1)||"main");
+renderDac(); renderPwm();
+// Живой режим: задай IP в Settings и нажми Connect, либо:
+// connectScope(`ws://${location.host}/scope`);
+</script>
+</body>
