@@ -7406,29 +7406,29 @@ LOAD C:/ST/STM32CubeIDE_1.15.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.ext
  .debug_line    0x000156ea     0x5451 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_tim.o
  .debug_line    0x0001ab3b     0x2493 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_tim_ex.o
 
-.debug_str      0x00000000   0x19e0f1
- .debug_str     0x00000000   0x19e0f1 ./Common/Src/system_stm32h7xx_dualcore_boot_cm4_cm7.o
+.debug_str      0x00000000   0x19e0bc
+ .debug_str     0x00000000   0x19e0bc ./Common/Src/system_stm32h7xx_dualcore_boot_cm4_cm7.o
                              0x1942b1 (size before relaxing)
- .debug_str     0x0019e0f1   0x194cbb ./Core/Src/ipc_m4.o
- .debug_str     0x0019e0f1   0x19695c ./Core/Src/main.o
- .debug_str     0x0019e0f1   0x19620b ./Core/Src/stm32h7xx_hal_msp.o
- .debug_str     0x0019e0f1   0x194775 ./Core/Src/stm32h7xx_it.o
- .debug_str     0x0019e0f1     0x998b ./Core/Src/syscalls.o
- .debug_str     0x0019e0f1     0x7735 ./Core/Src/sysmem.o
- .debug_str     0x0019e0f1       0x79 ./Core/Startup/startup_stm32h755zitx.o
- .debug_str     0x0019e0f1   0x1955e1 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal.o
- .debug_str     0x0019e0f1   0x19527a ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_adc.o
- .debug_str     0x0019e0f1   0x194d67 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_cortex.o
- .debug_str     0x0019e0f1   0x19473d ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_dac.o
- .debug_str     0x0019e0f1   0x194775 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_dac_ex.o
- .debug_str     0x0019e0f1   0x194bcf ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_dma.o
- .debug_str     0x0019e0f1   0x1944c0 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_gpio.o
- .debug_str     0x0019e0f1   0x19414b ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_hsem.o
- .debug_str     0x0019e0f1   0x194916 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_pwr_ex.o
- .debug_str     0x0019e0f1   0x194841 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_rcc.o
- .debug_str     0x0019e0f1   0x194d76 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_rcc_ex.o
- .debug_str     0x0019e0f1   0x1955cd ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_tim.o
- .debug_str     0x0019e0f1   0x194ef5 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_tim_ex.o
+ .debug_str     0x0019e0bc   0x194cbb ./Core/Src/ipc_m4.o
+ .debug_str     0x0019e0bc   0x19695c ./Core/Src/main.o
+ .debug_str     0x0019e0bc   0x19620b ./Core/Src/stm32h7xx_hal_msp.o
+ .debug_str     0x0019e0bc   0x194775 ./Core/Src/stm32h7xx_it.o
+ .debug_str     0x0019e0bc     0x998b ./Core/Src/syscalls.o
+ .debug_str     0x0019e0bc     0x7735 ./Core/Src/sysmem.o
+ .debug_str     0x0019e0bc       0x86 ./Core/Startup/startup_stm32h755zitx.o
+ .debug_str     0x0019e0bc   0x1955e1 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal.o
+ .debug_str     0x0019e0bc   0x19527a ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_adc.o
+ .debug_str     0x0019e0bc   0x194d67 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_cortex.o
+ .debug_str     0x0019e0bc   0x19473d ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_dac.o
+ .debug_str     0x0019e0bc   0x194775 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_dac_ex.o
+ .debug_str     0x0019e0bc   0x194bcf ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_dma.o
+ .debug_str     0x0019e0bc   0x1944c0 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_gpio.o
+ .debug_str     0x0019e0bc   0x19414b ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_hsem.o
+ .debug_str     0x0019e0bc   0x194916 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_pwr_ex.o
+ .debug_str     0x0019e0bc   0x194841 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_rcc.o
+ .debug_str     0x0019e0bc   0x194d76 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_rcc_ex.o
+ .debug_str     0x0019e0bc   0x1955cd ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_tim.o
+ .debug_str     0x0019e0bc   0x194ef5 ./Drivers/STM32H7xx_HAL_Driver/stm32h7xx_hal_tim_ex.o
 
 .comment        0x00000000       0x43
  .comment       0x00000000       0x43 ./Common/Src/system_stm32h7xx_dualcore_boot_cm4_cm7.o
@@ -7522,6 +7522,6 @@ LOAD C:/ST/STM32CubeIDE_1.15.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.ext
  .debug_frame   0x00003d04       0x24 C:/ST/STM32CubeIDE_1.15.0/STM32CubeIDE/plugins/com.st.stm32cube.ide.mcu.externaltools.gnu-tools-for-stm32.14.3.rel1.win32_1.0.100.202602081740/tools/bin/../lib/gcc/arm-none-eabi/14.3.1/thumb/v7e-m+fp/hard\libgcc.a(_arm_fixdfsi.o)
 
 .debug_line_str
-                0x00000000       0x5d
+                0x00000000       0x6a
  .debug_line_str
-                0x00000000       0x5d ./Core/Startup/startup_stm32h755zitx.o
+                0x00000000       0x6a ./Core/Startup/startup_stm32h755zitx.o
