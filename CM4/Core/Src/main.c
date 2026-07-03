@@ -28,7 +28,8 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+/* g_ipc на 0x38000000, ~0x4140 байт. Буфер кладём с запасом дальше */
+//#define adc_buf_cm4  ((volatile uint16_t*)0x38008000)   /* SRAM4 + 32K */
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -50,7 +51,7 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-
+#define adc_buf_cm4  ((volatile uint16_t*)0x38008000)   /* SRAM4 + 32K, за g_ipc */
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
@@ -81,7 +82,8 @@ DAC_HandleTypeDef hdac1;
 TIM_HandleTypeDef htim6;
 
 /* USER CODE BEGIN PV */
-
+//static uint16_t adc_buf_cm4[512] __attribute__((section(".bdma_buffer"), aligned(32)));;
+volatile uint32_t cm4_adc_cb = 0;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -108,7 +110,6 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-	  SCB->CPACR |= ((3UL << 20)|(3UL << 22));   /* CP10/CP11 full access */
 
   /* USER CODE END 1 */
 
@@ -138,6 +139,7 @@ int main(void)
   /* USER CODE END Init */
 
   /* USER CODE BEGIN SysInit */
+  /* где-нибудь в USER CODE 2, после старта */
 
   /* USER CODE END SysInit */
 
@@ -149,6 +151,19 @@ int main(void)
   MX_DAC1_Init();
   /* USER CODE BEGIN 2 */
   //ipc_m4_init();
+
+  HAL_ADCEx_Calibration_Start(&hadc3, ADC_CALIB_OFFSET, ADC_SINGLE_ENDED);
+
+
+
+  if (hadc3.Instance->CR & ADC_CR_ADCAL) {
+      __BKPT(0);
+  }
+
+
+  HAL_ADC_Start_DMA(&hadc3, (uint32_t *)adc_buf_cm4, 512);
+  HAL_TIM_Base_Start(&htim6);
+
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -190,18 +205,15 @@ static void MX_ADC3_Init(void)
   hadc3.Init.ContinuousConvMode = DISABLE;
   hadc3.Init.NbrOfConversion = 1;
   hadc3.Init.DiscontinuousConvMode = DISABLE;
-  hadc3.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-  hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
-  hadc3.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DMA_ONESHOT;
+  hadc3.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T6_TRGO;
+  hadc3.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
+  hadc3.Init.ConversionDataManagement = ADC_CONVERSIONDATA_DMA_CIRCULAR;
   hadc3.Init.Overrun = ADC_OVR_DATA_PRESERVED;
   hadc3.Init.LeftBitShift = ADC_LEFTBITSHIFT_NONE;
   hadc3.Init.OversamplingMode = DISABLE;
   hadc3.Init.Oversampling.Ratio = 1;
-  if (HAL_ADC_Init(&hadc3) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  hadc3.Init.Resolution = ADC_RESOLUTION_16B;
+
+  hadc3.Init.Resolution = ADC_RESOLUTION_12B;
   if (HAL_ADC_Init(&hadc3) != HAL_OK)
   {
     Error_Handler();
@@ -289,13 +301,13 @@ static void MX_TIM6_Init(void)
   htim6.Instance = TIM6;
   htim6.Init.Prescaler = 0;
   htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim6.Init.Period = 65535;
+  htim6.Init.Period = 300;
   htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
   {
     Error_Handler();
   }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
   sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
   if (HAL_TIMEx_MasterConfigSynchronization(&htim6, &sMasterConfig) != HAL_OK)
   {
@@ -344,6 +356,10 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
+    if (hadc->Instance == ADC3) {cm4_adc_cb++;}
+}
+
 
 /* USER CODE END 4 */
 
