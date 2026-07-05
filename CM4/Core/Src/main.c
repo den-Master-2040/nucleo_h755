@@ -25,6 +25,10 @@
 #include "freedv_api.h"
 #include "codec2_fifo.h"
 #include "ipc.h"
+#define ADC_CAPTURE  1024      /* снимаем с запасом */
+#define FRAME_OUT    512       /* отдаём в кадр */
+#define DAC_TABLE_SIZE 256
+uint16_t dac_table[DAC_TABLE_SIZE];
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -79,8 +83,10 @@ ADC_HandleTypeDef hadc3;
 DMA_HandleTypeDef hdma_adc3;
 
 DAC_HandleTypeDef hdac1;
+DMA_HandleTypeDef hdma_dac1_ch1;
 
 TIM_HandleTypeDef htim6;
+TIM_HandleTypeDef htim7;
 
 /* USER CODE BEGIN PV */
 //static uint16_t adc_buf_cm4[512] __attribute__((section(".bdma_buffer"), aligned(32)));;
@@ -90,9 +96,11 @@ volatile uint32_t cm4_adc_cb = 0;
 /* Private function prototypes -----------------------------------------------*/
 static void MX_GPIO_Init(void);
 static void MX_BDMA_Init(void);
+static void MX_DMA_Init(void);
 static void MX_ADC3_Init(void);
 static void MX_TIM6_Init(void);
 static void MX_DAC1_Init(void);
+static void MX_TIM7_Init(void);
 /* USER CODE BEGIN PFP */
 void ipc_m4_init(void);
 
@@ -136,6 +144,7 @@ int main(void)
 #endif/* временно отключить boot-sync */
 /* USER CODE END Boot_Mode_Sequence_1 */
   /* MCU Configuration--------------------------------------------------------*/
+
   /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
   HAL_Init();
 
@@ -149,11 +158,30 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_BDMA_Init();
+  MX_DMA_Init();
   MX_ADC3_Init();
   MX_TIM6_Init();
   MX_DAC1_Init();
+  MX_TIM7_Init();
   /* USER CODE BEGIN 2 */
   //ipc_m4_init();
+
+  /* заполнить чем-нибудь (один раз при старте) */
+#include <math.h>
+
+  const float amplitude = 950.0f;
+  const float offset = 2050.0f;
+  // Шаг угла для полного цикла (2 * PI) на 256 точек
+  const float step = 2.0f * 3.1415926535f / 256.0f;
+
+  for (uint16_t i = 0; i < DAC_TABLE_SIZE; i++) {
+    // Вычисляем значение синуса и сдвигаем его в нужный диапазон
+	float val = amplitude * sinf(step * i) + offset;
+
+    // Приводим к uint16_t с правильным математическим округлением
+	dac_table[i] = (uint16_t)(val + 0.5f);
+  }
+
   HAL_ADCEx_Calibration_Start(&hadc3, ADC_CALIB_OFFSET, ADC_SINGLE_ENDED);
 
 
@@ -163,9 +191,14 @@ int main(void)
   }
 
 
-  HAL_ADC_Start_DMA(&hadc3, (uint32_t *)adc_buf_cm4, 512);
+  HAL_ADC_Start_DMA(&hadc3, (uint32_t *)adc_buf_cm4, ADC_CAPTURE);
 
   HAL_TIM_Base_Start(&htim6);
+
+  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1,
+                    (uint32_t *)dac_table, DAC_TABLE_SIZE,
+                    DAC_ALIGN_12B_R);
+  HAL_TIM_Base_Start(&htim7);   /* таймер погнал DAC по DMA */
 
   /* USER CODE END 2 */
 
@@ -270,11 +303,18 @@ static void MX_DAC1_Init(void)
   /** DAC channel OUT1 config
   */
   sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
-  sConfig.DAC_Trigger = DAC_TRIGGER_NONE;
-  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
+  sConfig.DAC_Trigger = DAC_TRIGGER_T7_TRGO;
+  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_DISABLE;
   sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_DISABLE;
   sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
   if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Configure Triangle wave generation on DAC OUT1
+  */
+  if (HAL_DACEx_TriangleWaveGenerate(&hdac1, DAC_CHANNEL_1, DAC_TRIANGLEAMPLITUDE_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -323,6 +363,44 @@ static void MX_TIM6_Init(void)
 }
 
 /**
+  * @brief TIM7 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM7_Init(void)
+{
+
+  /* USER CODE BEGIN TIM7_Init 0 */
+
+  /* USER CODE END TIM7_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM7_Init 1 */
+
+  /* USER CODE END TIM7_Init 1 */
+  htim7.Instance = TIM7;
+  htim7.Init.Prescaler = 0;
+  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim7.Init.Period = 300;
+  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim7, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM7_Init 2 */
+
+  /* USER CODE END TIM7_Init 2 */
+
+}
+
+/**
   * Enable DMA controller clock
   */
 static void MX_BDMA_Init(void)
@@ -335,6 +413,22 @@ static void MX_BDMA_Init(void)
   /* BDMA_Channel0_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(BDMA_Channel0_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(BDMA_Channel0_IRQn);
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
+
+  /* DMA interrupt init */
+  /* DMA1_Stream0_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Stream0_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Stream0_IRQn);
 
 }
 
@@ -364,29 +458,41 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
     volatile ipc_frame_t *slot = ipc_ring_acquire(&g_ipc.ring);
     if (!slot) return;
 
-    /* метрики одним проходом */
-    uint16_t mn = 4095, mx = 0; uint32_t sum = 0;
-    for (int i = 0; i < 512; i++) {
-        uint16_t s = adc_buf_cm4[i];
+    /* средняя линия по всему захвату */
+    uint32_t sum = 0;
+    for (int i = 0; i < ADC_CAPTURE; i++) sum += adc_buf_cm4[i];
+    uint16_t dc = sum / ADC_CAPTURE;
+
+    /* триггер: пересечение dc на подъёме, ТОЛЬКО в первой половине */
+    int32_t trig = -1;
+    for (int i = 1; i < ADC_CAPTURE - FRAME_OUT; i++) {   /* до 512, чтоб хвост влез */
+        if (adc_buf_cm4[i-1] < dc && adc_buf_cm4[i] >= dc) { trig = i; break; }
+    }
+    if (trig < 0) trig = 0;   /* не нашли — от начала */
+
+    /* копируем 512 точек ОТ триггера + метрики на этом окне */
+    uint16_t mn = 4095, mx = 0;
+    for (int i = 0; i < FRAME_OUT; i++) {
+        uint16_t s = adc_buf_cm4[trig + i];
         if (s < mn) mn = s;
         if (s > mx) mx = s;
-        sum += s;
-        slot->samples[i] = s;              /* ← КОПИРУЕМ сэмплы */
+        slot->samples[i] = s;
     }
+
     slot->seq = ++cm4_adc_cb;
-    slot->n_samples = 512;
-    slot->sample_rate_hz = 100000;         /* ← 100000, не 100! */
-    slot->flags = 0x2;
-    slot->trigger_offset = 0;
-    slot->dc_level = sum / 512;
+    slot->n_samples = FRAME_OUT;
+    slot->sample_rate_hz = 100000;
+    slot->dc_level = dc;
     slot->v_min = mn;
     slot->v_max = mx;
     slot->v_pp = mx - mn;
     slot->rms = 0;
     slot->crossings = 0;
+    slot->trigger_offset = 0;         /* УЖЕ выровнено при копировании! */
+    slot->flags = 0x1 | 0x2;          /* TRIG_VALID | SIGNAL */
+
     ipc_ring_commit(&g_ipc.ring);
 }
-
 
 /* USER CODE END 4 */
 

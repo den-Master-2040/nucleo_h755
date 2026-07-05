@@ -70,6 +70,7 @@ const osThreadAttr_t defaultTask_attributes = {
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_BDMA_Init(void);
+static void MX_DMA_Init(void);
 void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
@@ -152,6 +153,7 @@ Error_Handler();
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_BDMA_Init();
+  MX_DMA_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -271,6 +273,17 @@ static void MX_BDMA_Init(void)
 
   /* DMA controller clock enable */
   __HAL_RCC_BDMA_CLK_ENABLE();
+
+}
+
+/**
+  * Enable DMA controller clock
+  */
+static void MX_DMA_Init(void)
+{
+
+  /* DMA controller clock enable */
+  __HAL_RCC_DMA1_CLK_ENABLE();
 
 }
 
