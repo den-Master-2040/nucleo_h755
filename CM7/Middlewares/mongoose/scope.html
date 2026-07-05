@@ -655,6 +655,6 @@ addEventListener("resize",()=>{const sc=scopes[cur];if(sc)sc.resize();
 show(location.hash.slice(1)||"main");
 renderDac(); renderPwm();
 // Живой режим: задай IP в Settings и нажми Connect, либо:
-// connectScope(`ws://${location.host}/scope`);
+connectScope(`ws://${location.host}/scope`);
 </script>
 </body>

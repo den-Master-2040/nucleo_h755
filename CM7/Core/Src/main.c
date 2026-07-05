@@ -94,6 +94,8 @@ int main(void)
 	//ipc_mpu_config();        /* 1. MPU настроен ДО кэшей */
 	//SCB_EnableICache();      /* 2. теперь можно кэши      */
 	//SCB_EnableDCache();
+	//HAL_DBGMCU_EnableDBGStopMode();   /* разрешить debug в STOP — чтобы CM4 засыпал под дебагом */
+	//DBGMCU->CR |= DBGMCU_CR_DBG_STOPD2;   /* debug домена D2 в STOP */
   /* USER CODE END 1 */
 /* USER CODE BEGIN Boot_Mode_Sequence_0 */
 #if defined(DUAL_CORE_BOOT_SYNC_SEQUENCE)
@@ -159,7 +161,7 @@ Error_Handler();
 
   /* USER CODE BEGIN RTOS_MUTEX */
   /* add mutexes, ... */
-  //ipc_m7_init();
+  ipc_m7_init();
   /* USER CODE END RTOS_MUTEX */
 
   /* USER CODE BEGIN RTOS_SEMAPHORES */

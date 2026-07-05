@@ -41,7 +41,7 @@ static void handle_command(struct mg_str j) {
                                               mg_json_get_long(j, "$.duty", 50));
     else if (!strcmp(cmd, "reset_state")) ipc_send_cmd(IPC_CMD_RESET_STATE, 0, 0);
     /* set_trig / reboot аналогично */
-    free(cmd);
+    mg_free(cmd);
 }
 
 /* --- HTTP + WebSocket события --- */
@@ -93,7 +93,7 @@ static void web_task(void *arg) {
     for (;;) {
         mg_mgr_poll(&mgr, 5);    /* 5 мс → плавный поток, низкая латентность */
 
-        //pump_frames();
+        pump_frames();
 
     }
 }
