@@ -3,7 +3,7 @@
 Программировался для отладочной платы NUCLEO-H755ZI-Q.
 
 Здесь развёрнут веб сервер. По умолчанию устанавливается адресс 192.168.1.129.
-<img width="1810" height="996" alt="image" src="https://github.com/user-attachments/assets/26c9ad3a-c3cb-4232-b7fd-5bee8ff237d2" />
+<img width="2512" height="1317" alt="image" src="https://github.com/user-attachments/assets/63412f92-029c-4d53-a7e8-739ac53c4b30" />
 
 Сервер пока что только демонстративный, кнопочки не тыкаются, но уже сейчас есть данные с ацп. 
 В папке CM7\Middlewares\mongoose есть html файл scope, из которого с помощью xxd сделан 
