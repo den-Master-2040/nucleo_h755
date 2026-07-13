@@ -72,6 +72,8 @@ typedef struct {
     uint16_t samples[IPC_FRAME_MAX_SAMPLES]; /* сырьё, uint16 LE           */
 } ipc_frame_t;
 
+#define MODEM_RING_SZ  8192   /* сэмплов; степень двойки, ~1 сек при Fs=8000 */
+
 /* ---- SPSC-кольцо: CM4 пишет (head), CM7 читает (tail) ------------------- */
 typedef struct {
     volatile uint32_t head;   /* двигает ТОЛЬКО производитель CM4          */
@@ -79,6 +81,9 @@ typedef struct {
     volatile uint32_t drops;  /* счётчик дропов, пишет ТОЛЬКО CM4          */
     uint32_t _pad;            /* до 16 Б; струк ниже выровнен на 32        */
     ipc_frame_t frames[IPC_RING_FRAMES];
+    volatile uint32_t wr;                    /* пишет только CM4 */
+        volatile uint32_t rd;                    /* пишет только CM7 */
+        volatile uint16_t buf[MODEM_RING_SZ];    /* сырые отсчёты АЦП */
 } ipc_ring_t;
 
 /* ---- мейлбокс команд CM7 -> CM4, ack обратно ---------------------------- */
@@ -91,10 +96,12 @@ typedef struct {
     uint32_t ack_d0, ack_d1;     /* опциональные данные ответа             */
 } ipc_mailbox_t;
 
+
 /* ---- всё, что лежит в разделяемом регионе ------------------------------- */
 typedef struct {
     ipc_mailbox_t mbox;
     ipc_ring_t    ring;
+
 } ipc_shared_t;
 
 /* Экземпляр определяется в ipc.c КАЖДОГО ядра с привязкой к секции:

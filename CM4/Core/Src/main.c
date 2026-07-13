@@ -29,6 +29,7 @@
 #define FRAME_OUT    512       /* отдаём в кадр */
 #define DAC_TABLE_SIZE 256
 uint16_t dac_table[DAC_TABLE_SIZE];
+#include "fsk.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -248,7 +249,10 @@ static void MX_ADC3_Init(void)
   hadc3.Init.LeftBitShift = ADC_LEFTBITSHIFT_NONE;
   hadc3.Init.OversamplingMode = DISABLE;
   hadc3.Init.Oversampling.Ratio = 1;
-
+  if (HAL_ADC_Init(&hadc3) != HAL_OK)
+  {
+    Error_Handler();
+  }
   hadc3.Init.Resolution = ADC_RESOLUTION_12B;
   if (HAL_ADC_Init(&hadc3) != HAL_OK)
   {
@@ -342,9 +346,9 @@ static void MX_TIM6_Init(void)
 
   /* USER CODE END TIM6_Init 1 */
   htim6.Instance = TIM6;
-  htim6.Init.Prescaler = 0;
+  htim6.Init.Prescaler = 25;
   htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim6.Init.Period = 300;
+  htim6.Init.Period = 1000;
   htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
   {
@@ -380,10 +384,10 @@ static void MX_TIM7_Init(void)
 
   /* USER CODE END TIM7_Init 1 */
   htim7.Instance = TIM7;
-  htim7.Init.Prescaler = 0;
+  htim7.Init.Prescaler = 25;
   htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim7.Init.Period = 300;
-  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  htim7.Init.Period = 1000;
+  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
   {
     Error_Handler();
@@ -453,8 +457,25 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+static void modem_push(const volatile uint16_t *src, uint32_t n)
+{
+    uint32_t wr = g_ipc.ring.wr;
+    for (uint32_t i = 0; i < n; i++)
+        g_ipc.ring.buf[(wr + i) & (MODEM_RING_SZ - 1u)] = src[i];
+    __DMB();                      /* данные раньше индекса */
+    g_ipc.ring.wr = wr + n;
+}
+
+void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc)
+{
+    if (hadc->Instance != ADC3) return;
+    modem_push(&adc_buf_cm4[0], ADC_CAPTURE / 2);
+}
+
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
     if (hadc->Instance != ADC3) return;
+    modem_push(&adc_buf_cm4[ADC_CAPTURE / 2], ADC_CAPTURE / 2);
+
     volatile ipc_frame_t *slot = ipc_ring_acquire(&g_ipc.ring);
     if (!slot) return;
 
@@ -493,6 +514,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc) {
 
     ipc_ring_commit(&g_ipc.ring);
 }
+
 
 /* USER CODE END 4 */
 

@@ -15,7 +15,13 @@ volatile ipc_shared_t g_ipc;
 
 volatile uint32_t g_landing[16];   /* куда пишем значения */
 static uint32_t   s_idx = 0;
+#define MODEM_RING_SZ  8192   /* сэмплов; степень двойки, ~1 сек при Fs=8000 */
 
+typedef struct {
+    volatile uint32_t wr;                    /* пишет только CM4 */
+    volatile uint32_t rd;                    /* пишет только CM7 */
+    volatile uint16_t buf[MODEM_RING_SZ];    /* сырые отсчёты АЦП */
+} modem_ring_t;
 void ipc_m4_init(void) {
     __HAL_RCC_HSEM_CLK_ENABLE();
     /* CM4 хочет прерывание, когда CM7 освободит семафор CMD */

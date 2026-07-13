@@ -55,6 +55,8 @@
 
 /* Private variables ---------------------------------------------------------*/
 
+TIM_HandleTypeDef htim7;
+
 /* Definitions for defaultTask */
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
@@ -63,6 +65,21 @@ const osThreadAttr_t defaultTask_attributes = {
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE BEGIN PV */
+
+osThreadId_t modemTaskHandle;
+const osThreadAttr_t modemTask_attributes = {
+  .name = "modemTask",
+  .stack_size = 4096 * 2,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+
+osThreadId_t modem_checkTaskHandle;
+const osThreadAttr_t modem_checkTask_attributes = {
+  .name = "modem_checkTask",
+  .stack_size = 4096 * 2,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+uint8_t buf[512] __attribute__((section(".axi_sram"), aligned(32)));
 
 /* USER CODE END PV */
 
@@ -77,6 +94,8 @@ void StartDefaultTask(void *argument);
 void ipc_mpu_config(void);
 void ipc_m7_init(void);
 void web_server_start(void);
+void modem_task(void *arg);
+void modem_check_task(void *arg);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -183,12 +202,15 @@ Error_Handler();
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
+  modemTaskHandle = osThreadNew(modem_task, NULL, &modemTask_attributes);
+  modem_checkTaskHandle = osThreadNew(modem_check_task, NULL, &modem_checkTask_attributes);
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
   web_server_start();
+
+
   /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
@@ -263,6 +285,44 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
+}
+
+/**
+  * @brief TIM7 Initialization Function
+  * @param None
+  * @retval None
+  */
+void MX_TIM7_Init(void)
+{
+
+  /* USER CODE BEGIN TIM7_Init 0 */
+
+  /* USER CODE END TIM7_Init 0 */
+
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM7_Init 1 */
+
+  /* USER CODE END TIM7_Init 1 */
+  htim7.Instance = TIM7;
+  htim7.Init.Prescaler = 25;
+  htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim7.Init.Period = 1000;
+  htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
+  if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim7, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM7_Init 2 */
+
+  /* USER CODE END TIM7_Init 2 */
+
 }
 
 /**
@@ -341,6 +401,8 @@ void ipc_mpu_config(void)   /* вызвать на CM7 ДО включения �
   * @param  argument: Not used
   * @retval None
   */
+
+
 /* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void *argument)
 {
@@ -348,9 +410,11 @@ void StartDefaultTask(void *argument)
   MX_LWIP_Init();
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
+
   for(;;)
   {
     osDelay(1);
+
   }
   /* USER CODE END 5 */
 }

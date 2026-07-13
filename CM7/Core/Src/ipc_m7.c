@@ -8,6 +8,7 @@
 #include "ipc.h"
 #include "stm32h7xx_hal.h"
 
+
 volatile ipc_shared_t g_ipc __attribute__((section(".ipc_shared"), aligned(32)));
 
 static volatile bool s_ack_ready = false;
