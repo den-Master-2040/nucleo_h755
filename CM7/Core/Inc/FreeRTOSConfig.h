@@ -70,7 +70,7 @@ void xPortSysTickHandler(void);
 #define configUSE_SB_COMPLETED_CALLBACK          ( 0 )
 #define configUSE_MINI_LIST_ITEM                ( 1 )
 #define configMINIMAL_STACK_SIZE                 ((uint16_t)128)
-#define configTOTAL_HEAP_SIZE                    ((size_t)122880*3)
+#define configTOTAL_HEAP_SIZE                    ((size_t)1024*256)
 #define configMAX_TASK_NAME_LEN                  ( 16 )
 #define configHEAP_CLEAR_MEMORY_ON_FREE          0
 #define configUSE_TRACE_FACILITY                 1
@@ -171,6 +171,8 @@ standard names. */
 
 /* USER CODE BEGIN Defines */
 /* Section where parameter definitions can be added (for instance, to override default ones in FreeRTOS.h) */
+#define configUSE_MALLOC_FAILED_HOOK  1
+#define configAPPLICATION_ALLOCATED_HEAP 1
 /* USER CODE END Defines */
 
 #endif /* FREERTOS_CONFIG_H */

@@ -22,7 +22,7 @@
 
 /* ---- конфигурация ------------------------------------------------------- */
 #define IPC_FRAME_MAX_SAMPLES  1024u   /* потолок точек в кадре              */
-#define IPC_RING_FRAMES        8u      /* ДОЛЖНО быть степенью двойки        */
+#define IPC_RING_FRAMES        4u      /* ДОЛЖНО быть степенью двойки        */
 
 /* флаги кадра */
 #define IPC_FLAG_TRIG_VALID    (1u << 0)  /* trigger_offset валиден          */
@@ -72,7 +72,7 @@ typedef struct {
     uint16_t samples[IPC_FRAME_MAX_SAMPLES]; /* сырьё, uint16 LE           */
 } ipc_frame_t;
 
-#define MODEM_RING_SZ  8192   /* сэмплов; степень двойки, ~1 сек при Fs=8000 */
+#define MODEM_RING_SZ  8192u   /* сэмплов; степень двойки, ~1 сек при Fs=8000 */
 
 /* ---- SPSC-кольцо: CM4 пишет (head), CM7 читает (tail) ------------------- */
 typedef struct {
@@ -82,8 +82,9 @@ typedef struct {
     uint32_t _pad;            /* до 16 Б; струк ниже выровнен на 32        */
     ipc_frame_t frames[IPC_RING_FRAMES];
     volatile uint32_t wr;                    /* пишет только CM4 */
-        volatile uint32_t rd;                    /* пишет только CM7 */
-        volatile uint16_t buf[MODEM_RING_SZ];    /* сырые отсчёты АЦП */
+	volatile uint32_t rd;                    /* пишет только CM7 */
+	volatile uint16_t buf[MODEM_RING_SZ];    /* сырые отсчёты АЦП */
+	volatile uint32_t mdrops;
 } ipc_ring_t;
 
 /* ---- мейлбокс команд CM7 -> CM4, ack обратно ---------------------------- */

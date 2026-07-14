@@ -92,6 +92,30 @@ void HardFault_Handler(void)
   while (1)
   {
     /* USER CODE BEGIN W1_HardFault_IRQn 0 */
+	  /* stm32h7xx_it.c */
+	  volatile uint32_t g_cfsr, g_hfsr, g_mmfar, g_bfar, g_pc, g_lr;
+
+	  void HardFault_Handler(void)
+	  {
+	      __asm volatile (
+	          "tst lr, #4        \n"
+	          "ite eq            \n"
+	          "mrseq r0, msp     \n"
+	          "mrsne r0, psp     \n"
+	          "ldr r1, [r0, #24] \n"   /* stacked PC */
+	          "ldr r2, [r0, #20] \n"   /* stacked LR */
+	          "ldr r3, =g_pc     \n"
+	          "str r1, [r3]      \n"
+	          "ldr r3, =g_lr     \n"
+	          "str r2, [r3]      \n"
+	          ::: "r0","r1","r2","r3");
+	      g_cfsr  = SCB->CFSR;
+	      g_hfsr  = SCB->HFSR;
+	      g_mmfar = SCB->MMFAR;
+	      g_bfar  = SCB->BFAR;
+	      __BKPT(0);
+	      while (1);
+	  }
 	  __BKPT(0);
     /* USER CODE END W1_HardFault_IRQn 0 */
   }

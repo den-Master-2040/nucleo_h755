@@ -109,7 +109,36 @@ void ipc_m4_init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+/* вместо DAC_TABLE_SIZE/dac_table ---------------------------------- */
+#define TX_NBITS  100
+#define TX_N      8000                       /* Ts=80 × 50 бит        */
+static struct FSK *tx_fsk;
+static uint8_t  tx_bits2[100];
+static float    tx_float[TX_N];
+static uint16_t tx_dma_buf[2 * TX_N];        /* 16 КБ, D2 — DMA1 ок   */
 
+static const uint8_t tx_pattern[TX_NBITS] = {
+    1,0,1,1,0,0,1,0, 1,1,1,0,0,0,1,0, 0,1,1,0,1,0,0,1,
+    1,0,0,0,1,1,0,1, 0,1,0,0,0,1,1,1, 0,0,1,0,1,1,0,1, 1,0
+};  /* байт-в-байт как в web.c на CM7 */
+
+static void tx_fill(uint16_t *dst)
+{
+    fsk_mod(tx_fsk, tx_float, (uint8_t*)tx_bits2, TX_NBITS);
+    for (int i = 0; i < TX_N; i++) {
+        float s = tx_float[i]* 0.5f;
+        if (s >  1.0f) s =  1.0f;
+        if (s < -1.0f) s = -1.0f;
+        dst[i] = (uint16_t)(2048.0f + 1900.0f * s);
+    }
+}
+volatile uint32_t g_dac_half_cb, g_dac_full_cb;
+
+void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef *h)
+{ g_dac_half_cb++; tx_fill(&tx_dma_buf[0]); }
+
+void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *h)
+{ g_dac_full_cb++; tx_fill(&tx_dma_buf[TX_N]); }
 /* USER CODE END 0 */
 
 /**
@@ -120,11 +149,12 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+	/* ждём, пока CM7 переключит SYSCLK на PLL1 — значит, клоки и питание готовы */
+	while ((RCC->CFGR & RCC_CFGR_SWS) != RCC_CFGR_SWS_PLL1) { }
   /* USER CODE END 1 */
 
 /* USER CODE BEGIN Boot_Mode_Sequence_1 */
-#if 1   /* временно отключить boot-sync */
+#if 0   /* временно отключить boot-sync */
 
 #if defined(DUAL_CORE_BOOT_SYNC_SEQUENCE)
   /*HW semaphore Clock enable*/
@@ -167,40 +197,21 @@ int main(void)
   /* USER CODE BEGIN 2 */
   //ipc_m4_init();
 
-  /* заполнить чем-нибудь (один раз при старте) */
-#include <math.h>
+  g_ipc.ring.wr = 0;                            /* см. ниже, это второй баг */
 
-  const float amplitude = 950.0f;
-  const float offset = 2050.0f;
-  // Шаг угла для полного цикла (2 * PI) на 256 точек
-  const float step = 2.0f * 3.1415926535f / 256.0f;
+  tx_fsk = fsk_create(8000, 100, 2, 1200, 200);
+  if (!tx_fsk) __BKPT(0);
+  for (int i = 0; i < 100; i++) tx_bits2[i] = tx_pattern[i % 50];
 
-  for (uint16_t i = 0; i < DAC_TABLE_SIZE; i++) {
-    // Вычисляем значение синуса и сдвигаем его в нужный диапазон
-	float val = amplitude * sinf(step * i) + offset;
-
-    // Приводим к uint16_t с правильным математическим округлением
-	dac_table[i] = (uint16_t)(val + 0.5f);
-  }
+  tx_fill(&tx_dma_buf[0]);
+  tx_fill(&tx_dma_buf[TX_N]);
 
   HAL_ADCEx_Calibration_Start(&hadc3, ADC_CALIB_OFFSET, ADC_SINGLE_ENDED);
-
-
-
-  if (hadc3.Instance->CR & ADC_CR_ADCAL) {
-      __BKPT(0);
-  }
-
-
-  HAL_ADC_Start_DMA(&hadc3, (uint32_t *)adc_buf_cm4, ADC_CAPTURE);
-
+  HAL_ADC_Start_DMA(&hadc3, (uint32_t*)adc_buf_cm4, ADC_CAPTURE);
   HAL_TIM_Base_Start(&htim6);
-
-  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1,
-                    (uint32_t *)dac_table, DAC_TABLE_SIZE,
-                    DAC_ALIGN_12B_R);
-  HAL_TIM_Base_Start(&htim7);   /* таймер погнал DAC по DMA */
-
+  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)tx_dma_buf,
+                    2 * TX_N, DAC_ALIGN_12B_R);
+  HAL_TIM_Base_Start(&htim7);
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -263,7 +274,7 @@ static void MX_ADC3_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_1;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_810CYCLES_5;
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
@@ -308,17 +319,11 @@ static void MX_DAC1_Init(void)
   */
   sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
   sConfig.DAC_Trigger = DAC_TRIGGER_T7_TRGO;
-  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_DISABLE;
+  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
   sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_DISABLE;
   sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
-  if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_1) != HAL_OK)
-  {
-    Error_Handler();
-  }
 
-  /** Configure Triangle wave generation on DAC OUT1
-  */
-  if (HAL_DACEx_TriangleWaveGenerate(&hdac1, DAC_CHANNEL_1, DAC_TRIANGLEAMPLITUDE_1) != HAL_OK)
+  if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_1) != HAL_OK)
   {
     Error_Handler();
   }
@@ -346,9 +351,9 @@ static void MX_TIM6_Init(void)
 
   /* USER CODE END TIM6_Init 1 */
   htim6.Instance = TIM6;
-  htim6.Init.Prescaler = 25;
+  htim6.Init.Prescaler = 24;
   htim6.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim6.Init.Period = 1000;
+  htim6.Init.Period = 999;
   htim6.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim6) != HAL_OK)
   {
@@ -384,9 +389,9 @@ static void MX_TIM7_Init(void)
 
   /* USER CODE END TIM7_Init 1 */
   htim7.Instance = TIM7;
-  htim7.Init.Prescaler = 25;
+  htim7.Init.Prescaler = 24;
   htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim7.Init.Period = 1000;
+  htim7.Init.Period = 999;
   htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
   {
@@ -459,11 +464,15 @@ static void MX_GPIO_Init(void)
 /* USER CODE BEGIN 4 */
 static void modem_push(const volatile uint16_t *src, uint32_t n)
 {
-    uint32_t wr = g_ipc.ring.wr;
-    for (uint32_t i = 0; i < n; i++)
-        g_ipc.ring.buf[(wr + i) & (MODEM_RING_SZ - 1u)] = src[i];
-    __DMB();                      /* данные раньше индекса */
-    g_ipc.ring.wr = wr + n;
+	uint32_t wr = g_ipc.ring.wr;
+	if ((wr - g_ipc.ring.rd) + n > MODEM_RING_SZ) {   /* некуда — дропаем, НЕ затираем */
+		g_ipc.ring.mdrops++;
+		return;
+	}
+	for (uint32_t i = 0; i < n; i++)
+		g_ipc.ring.buf[(wr + i) & (MODEM_RING_SZ - 1u)] = src[i];
+	__DMB();
+	g_ipc.ring.wr = wr + n;
 }
 
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *hadc)

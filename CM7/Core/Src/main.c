@@ -66,20 +66,20 @@ const osThreadAttr_t defaultTask_attributes = {
 };
 /* USER CODE BEGIN PV */
 
-osThreadId_t modemTaskHandle;
+/*osThreadId_t modemTaskHandle;
 const osThreadAttr_t modemTask_attributes = {
   .name = "modemTask",
-  .stack_size = 4096 * 2,
+  .stack_size = 8192,
   .priority = (osPriority_t) osPriorityNormal,
-};
+};*/
 
 osThreadId_t modem_checkTaskHandle;
 const osThreadAttr_t modem_checkTask_attributes = {
   .name = "modem_checkTask",
-  .stack_size = 4096 * 2,
+  .stack_size = 8192,
   .priority = (osPriority_t) osPriorityNormal,
 };
-uint8_t buf[512] __attribute__((section(".axi_sram"), aligned(32)));
+uint8_t buf[512] __attribute__((section(".axi_ram"), aligned(32)));
 
 /* USER CODE END PV */
 
@@ -111,11 +111,13 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-	//ipc_mpu_config();        /* 1. MPU настроен ДО кэшей */
-	//SCB_EnableICache();      /* 2. теперь можно кэши      */
-	//SCB_EnableDCache();
+	ipc_mpu_config();        /* 1. MPU настроен ДО кэшей */
+	SCB_EnableICache();      /* 2. теперь можно кэши      */
+	SCB_EnableDCache();
 	//HAL_DBGMCU_EnableDBGStopMode();   /* разрешить debug в STOP — чтобы CM4 засыпал под дебагом */
 	//DBGMCU->CR |= DBGMCU_CR_DBG_STOPD2;   /* debug домена D2 в STOP */
+#if 0   /* временно отключить boot-sync */
+
   /* USER CODE END 1 */
 /* USER CODE BEGIN Boot_Mode_Sequence_0 */
 #if defined(DUAL_CORE_BOOT_SYNC_SEQUENCE)
@@ -133,6 +135,7 @@ int main(void)
   Error_Handler();
   }
 #endif /* DUAL_CORE_BOOT_SYNC_SEQUENCE */
+
 /* USER CODE END Boot_Mode_Sequence_1 */
   /* MCU Configuration--------------------------------------------------------*/
 
@@ -163,11 +166,12 @@ if ( timeout < 0 )
 Error_Handler();
 }
 #endif /* DUAL_CORE_BOOT_SYNC_SEQUENCE */
+#endif //отключение boot-sync
 /* USER CODE END Boot_Mode_Sequence_2 */
 
   /* USER CODE BEGIN SysInit */
-             /* 3. HSEM-нотификации, NVIC  */
-  /* USER CODE END SysInit */
+HAL_Init();
+	SystemClock_Config();  /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
@@ -194,21 +198,22 @@ Error_Handler();
   /* USER CODE END RTOS_TIMERS */
 
   /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
+
+
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
   /* creation of defaultTask */
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  //defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
-  modemTaskHandle = osThreadNew(modem_task, NULL, &modemTask_attributes);
+  //modemTaskHandle = osThreadNew(modem_task, NULL, &modemTask_attributes);
   modem_checkTaskHandle = osThreadNew(modem_check_task, NULL, &modem_checkTask_attributes);
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
   /* add events, ... */
-  web_server_start();
+  //web_server_start();
 
 
   /* USER CODE END RTOS_EVENTS */
@@ -255,12 +260,12 @@ void SystemClock_Config(void)
   RCC_OscInitStruct.HSEState = RCC_HSE_BYPASS;
   RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
   RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-  RCC_OscInitStruct.PLL.PLLM = 2;
-  RCC_OscInitStruct.PLL.PLLN = 64;
+  RCC_OscInitStruct.PLL.PLLM = 4;
+  RCC_OscInitStruct.PLL.PLLN = 400;
   RCC_OscInitStruct.PLL.PLLP = 2;
   RCC_OscInitStruct.PLL.PLLQ = 5;
   RCC_OscInitStruct.PLL.PLLR = 2;
-  RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_3;
+  RCC_OscInitStruct.PLL.PLLRGE = RCC_PLL1VCIRANGE_1;
   RCC_OscInitStruct.PLL.PLLVCOSEL = RCC_PLL1VCOWIDE;
   RCC_OscInitStruct.PLL.PLLFRACN = 0;
   if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
@@ -305,9 +310,9 @@ void MX_TIM7_Init(void)
 
   /* USER CODE END TIM7_Init 1 */
   htim7.Instance = TIM7;
-  htim7.Init.Prescaler = 25;
+  htim7.Init.Prescaler = 24;
   htim7.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim7.Init.Period = 1000;
+  htim7.Init.Period = 999;
   htim7.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_ENABLE;
   if (HAL_TIM_Base_Init(&htim7) != HAL_OK)
   {
@@ -407,7 +412,7 @@ void ipc_mpu_config(void)   /* вызвать на CM7 ДО включения �
 void StartDefaultTask(void *argument)
 {
   /* init code for LWIP */
-  MX_LWIP_Init();
+  //MX_LWIP_Init();
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
 

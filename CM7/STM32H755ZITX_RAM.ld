@@ -150,7 +150,12 @@ SECTIONS
     _edata = .;        /* define a global symbol at data end */
 
   } >RAM_D1
-
+.axi_ram (NOLOAD) :
+{
+    . = ALIGN(8);
+    *(.axi_ram)
+    . = ALIGN(8);
+} >RAM_D1
   /* Uninitialized data section into "RAM" Ram type memory */
   . = ALIGN(4);
   .bss :

@@ -20,7 +20,7 @@ static const uint8_t tx_pattern[CHECK_NBITS] = {
     1,0,1,1,0,0,1,0, 1,1,1,0,0,0,1,0, 0,1,1,0,1,0,0,1,
     1,0,0,0,1,1,0,1, 0,1,0,0,0,1,1,1, 0,0,1,0,1,1,0,1, 1,0
 };  /* байт-в-байт тот же, что на CM4! */
-
+volatile size_t g_fail_free;
 typedef struct {
     volatile uint32_t windows;      /* сколько окон измерено           */
     volatile float    ber;          /* BER последнего окна             */
@@ -29,6 +29,13 @@ typedef struct {
     volatile int      shift;        /* найденный циклический сдвиг     */
     volatile int      inverted;
     volatile uint32_t ring_level;   /* заполненность кольца, для глаза */
+    volatile uint32_t overruns;
+    volatile uint32_t demod_cycles;
+    volatile float ber_hist[16];
+    volatile int shift_hist[16];
+    volatile uint16_t err_hist50[50];   /* ошибки по позиции в паттерне   */
+    volatile uint16_t err_idx[32];      /* абсолютные позиции первых 32   */
+    volatile uint16_t err_n;
 } modem_check_t;
 volatile modem_check_t g_chk;       /* смотреть в Live Expressions     */
 
@@ -37,7 +44,8 @@ static COMP    dem_in[4000 + 256];
 static uint8_t bit_acc[CHECK_WINDOW + 64];
 static float   dc = 2048.0f;
 static struct mg_mgr mgr;
-
+__attribute__((section(".axi_ram"), aligned(8)))
+uint8_t ucHeap[configTOTAL_HEAP_SIZE];
 /* --- отправка команды на CM4 через мейлбокс (CM7-сторона) --- */
 static void ipc_send_cmd(uint32_t id, uint32_t p0, uint32_t p1) {
     g_ipc.mbox.cmd_id = id;
@@ -175,10 +183,28 @@ static void evaluate(const uint8_t *bits, int n)
     g_chk.shift    = best_s;
     g_chk.inverted = inv;
     g_chk.windows++;
+    g_chk.ber_hist[g_chk.windows & 15]   = g_chk.ber;
+    g_chk.shift_hist[g_chk.windows & 15] = best_s;
+
+    g_chk.err_n = 0;
+    for (int i = 0; i < n; i++) {
+        uint8_t ref = tx_pattern[(i + best_s) % CHECK_NBITS] ^ inv;
+        if (bits[i] != ref) {
+            g_chk.err_hist50[(i + best_s) % CHECK_NBITS]++;
+            if (g_chk.err_n < 32) g_chk.err_idx[g_chk.err_n] = i;
+            g_chk.err_n++;
+        }
+    }
 }
 
 void modem_check_task(void *arg)
 {
+	/* один раз при старте задачи */
+	CoreDebug->DEMCR |= CoreDebug_DEMCR_TRCENA_Msk;
+	DWT->CYCCNT = 0;
+	DWT->CTRL |= DWT_CTRL_CYCCNTENA_Msk;
+
+	g_ipc.ring.rd = g_ipc.ring.wr;
     dem = fsk_create(8000, 100, 2, 1200, 200);
     if (!dem) { for(;;) vTaskDelay(1000); }        /* heap! */
     fsk_set_freq_est_limits(dem, 900, 1700);
@@ -186,7 +212,13 @@ void modem_check_task(void *arg)
     int acc = 0;
     for (;;) {
         uint32_t nin = fsk_nin(dem);
-
+        uint32_t level = g_ipc.ring.wr - g_ipc.ring.rd;
+        if (level > MODEM_RING_SZ) {          /* нас переехали — данные потеряны */
+            g_ipc.ring.rd = g_ipc.ring.wr;    /* прыгаем в «сейчас» */
+            g_chk.overruns++;                 /* и считаем события */
+            continue;
+        }
+        g_chk.ring_level = level;
         while ((g_ipc.ring.wr - g_ipc.ring.rd) < nin)
             vTaskDelay(pdMS_TO_TICKS(20));         /* 8 кГц — некуда спешить */
 
@@ -200,7 +232,9 @@ void modem_check_task(void *arg)
         }
         g_ipc.ring.rd = rd + nin;
 
+        uint32_t t0 = DWT->CYCCNT;
         fsk_demod(dem, &bit_acc[acc], dem_in);
+        g_chk.demod_cycles = DWT->CYCCNT - t0;
         acc += dem->Nbits;
 
         g_chk.ebno_db = dem->EbNodB;               /* имена полей — по fsk.h */
@@ -212,4 +246,10 @@ void modem_check_task(void *arg)
             acc = 0;
         }
     }
+}
+
+void vApplicationMallocFailedHook(void) {
+    g_fail_free = xPortGetFreeHeapSize();
+    __BKPT(0);
+    for(;;);
 }
